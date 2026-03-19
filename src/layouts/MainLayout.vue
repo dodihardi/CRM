@@ -1,62 +1,126 @@
 <template>
   <div class="min-h-screen bg-slate-50 flex">
     <!-- Sidebar -->
-    <aside class="w-64 bg-slate-900 text-white flex flex-col fixed inset-y-0">
-      <div class="p-6">
-        <h1 class="text-2xl font-bold text-emerald-400">Nexus CRM</h1>
+    <aside 
+      class="bg-slate-900 text-white flex flex-col fixed inset-y-0 transition-all duration-300 ease-in-out z-30"
+      :class="[isSidebarCollapsed ? 'w-20' : 'w-64']"
+    >
+      <div class="p-6 flex items-center" :class="[isSidebarCollapsed ? 'justify-center' : 'justify-between']">
+        <h1 v-if="!isSidebarCollapsed" class="text-2xl font-bold text-emerald-400 truncate">Nexus CRM</h1>
+        <div v-else class="w-8 h-8 bg-emerald-400 rounded-lg flex items-center justify-center text-slate-900 font-bold">N</div>
       </div>
       
-      <nav class="flex-1 px-4 space-y-1">
+      <nav class="flex-1 px-4 space-y-1 overflow-y-auto overflow-x-hidden">
         <router-link 
           v-for="item in navItems" 
           :key="item.name"
           :to="item.path"
-          class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors"
+          class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative"
           :class="[
             $route.name === item.routeName ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
           ]"
         >
-          <component :is="item.icon" class="w-5 h-5 mr-3" />
-          {{ item.name }}
+          <component :is="item.icon" class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
+          <span v-if="!isSidebarCollapsed" class="truncate">{{ item.name }}</span>
+          
+          <!-- Tooltip for collapsed state -->
+          <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+            {{ item.name }}
+          </div>
         </router-link>
 
         <!-- Local Deployment Section -->
-        <div class="pt-4 pb-2 px-4">
-          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Environment</p>
+        <div class="pt-4 pb-2 px-4" :class="[isSidebarCollapsed ? 'text-center' : '']">
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">
+            {{ isSidebarCollapsed ? 'Env' : 'Environment' }}
+          </p>
         </div>
         <a 
           :href="appUrl" 
           target="_blank"
-          class="flex items-center px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+          class="flex items-center px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group relative"
         >
-          <Globe class="w-5 h-5 mr-3 text-emerald-400" />
-          Local Deployment
+          <Globe class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto text-emerald-400']" />
+          <span v-if="!isSidebarCollapsed" class="truncate text-emerald-400">Local Deployment</span>
+          
+          <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+            Local Deployment
+          </div>
         </a>
       </nav>
       
       <div class="p-4 border-t border-slate-800">
-        <div class="flex items-center px-4 py-2">
-          <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold">JD</div>
-          <div class="ml-3">
-            <p class="text-sm font-medium">John Doe</p>
-            <p class="text-xs text-slate-400">Administrator</p>
+        <div class="flex items-center" :class="[isSidebarCollapsed ? 'justify-center' : 'px-4 py-2']">
+          <div class="w-8 h-8 rounded-full bg-emerald-500 flex-shrink-0 flex items-center justify-center text-xs font-bold">JD</div>
+          <div v-if="!isSidebarCollapsed" class="ml-3 truncate">
+            <p class="text-sm font-medium truncate">John Doe</p>
+            <p class="text-xs text-slate-400 truncate">Administrator</p>
           </div>
         </div>
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="flex-1 ml-64 p-8">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </main>
+    <!-- Main Content Area -->
+    <div 
+      class="flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out"
+      :style="{ marginLeft: isSidebarCollapsed ? '5rem' : '16rem' }"
+    >
+      <!-- Header Navigation -->
+      <header class="h-16 bg-white border-b border-slate-200 sticky top-0 z-20 px-8 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <button 
+            @click="toggleSidebar" 
+            class="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+            title="Toggle Sidebar"
+          >
+            <Menu v-if="isSidebarCollapsed" class="w-5 h-5" />
+            <ChevronLeft v-else class="w-5 h-5" />
+          </button>
+          
+          <div class="relative hidden md:block">
+            <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search leads, auctions..." 
+              class="pl-10 pr-4 py-2 bg-slate-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 w-64 transition-all focus:w-80"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-4">
+          <button class="p-2 rounded-lg hover:bg-slate-100 text-slate-600 relative">
+            <Bell class="w-5 h-5" />
+            <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          </button>
+          
+          <div class="h-8 w-px bg-slate-200 mx-2"></div>
+          
+          <div class="flex items-center space-x-3 cursor-pointer hover:bg-slate-50 p-1 rounded-lg transition-colors">
+            <div class="text-right hidden sm:block">
+              <p class="text-sm font-bold text-slate-900">John Doe</p>
+              <p class="text-[10px] text-slate-500 uppercase font-bold">Admin</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
+              <img src="https://picsum.photos/seed/admin/100/100" alt="Avatar" class="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <main class="p-8 flex-1">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { 
   LayoutDashboard, 
   Users, 
@@ -64,10 +128,19 @@ import {
   Gavel, 
   Briefcase, 
   History,
-  Globe
+  Globe,
+  Menu,
+  Search,
+  Bell,
+  ChevronLeft
 } from 'lucide-vue-next'
 
+const isSidebarCollapsed = ref(false)
 const appUrl = process.env.APP_URL || '#'
+
+const toggleSidebar = () => {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
 
 const navItems = [
   { name: 'Dashboard', path: '/', routeName: 'dashboard', icon: LayoutDashboard },
@@ -88,5 +161,20 @@ const navItems = [
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Custom scrollbar for sidebar */
+nav::-webkit-scrollbar {
+  width: 4px;
+}
+nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+nav:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>
