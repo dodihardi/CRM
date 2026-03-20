@@ -9,6 +9,8 @@ export default defineConfig(({mode}) => {
     plugins: [vue(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.APP_URL': JSON.stringify(env.APP_URL || ''),
+      'process.env.DATABASE_URL': JSON.stringify(env.DATABASE_URL || ''),
     },
     resolve: {
       alias: {

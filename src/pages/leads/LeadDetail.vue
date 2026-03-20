@@ -17,7 +17,7 @@
       </div>
       <div class="flex gap-3">
         <button 
-          v-if="lead.status !== 'converted'"
+          v-if="lead.status !== 'converted' && authStore.isStaff"
           @click="handleConvert"
           class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors"
         >
@@ -36,6 +36,14 @@
           <h2 class="text-xl font-bold text-slate-900 mb-6">Lead Details</h2>
           <div class="grid grid-cols-2 gap-8">
             <div>
+              <p class="text-xs font-medium text-slate-400 uppercase mb-1">Phone</p>
+              <p class="text-lg font-medium text-slate-900">{{ lead.phone }}</p>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-400 uppercase mb-1">Source</p>
+              <p class="text-lg font-medium text-slate-900">{{ lead.source }}</p>
+            </div>
+            <div>
               <p class="text-xs font-medium text-slate-400 uppercase mb-1">Estimated Value</p>
               <p class="text-2xl font-bold text-slate-900">${{ lead.value.toLocaleString() }}</p>
             </div>
@@ -44,8 +52,12 @@
               <p class="text-lg font-medium text-slate-900">{{ new Date(lead.createdAt).toLocaleString() }}</p>
             </div>
             <div class="col-span-2">
+              <p class="text-xs font-medium text-slate-400 uppercase mb-1">Address</p>
+              <p class="text-slate-600">{{ lead.address }}</p>
+            </div>
+            <div class="col-span-2">
               <p class="text-xs font-medium text-slate-400 uppercase mb-1">Notes</p>
-              <p class="text-slate-600">Potential high-value client interested in spring equipment. Follow up required by end of week.</p>
+              <p class="text-slate-600">{{ lead.notes }}</p>
             </div>
           </div>
         </div>
@@ -104,6 +116,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { 
   ArrowLeft, 
   Phone, 
@@ -117,15 +130,20 @@ import {
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const lead = computed(() => store.leads.find(l => l.id === route.params.id))
 const leadActivities = computed(() => store.activities.filter(a => a.lead_id === route.params.id))
 
-const handleConvert = () => {
+const handleConvert = async () => {
   if (lead.value) {
-    const customer = store.convertLeadToCustomer(lead.value.id)
-    if (customer) {
-      router.push(`/customers/${customer.id}`)
+    try {
+      const customer = await store.convertLeadToCustomer(lead.value.id)
+      if (customer) {
+        router.push(`/customers/${customer.id}`)
+      }
+    } catch (err) {
+      alert('Failed to convert lead to customer')
     }
   }
 }

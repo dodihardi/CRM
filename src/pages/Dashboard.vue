@@ -75,11 +75,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { Users, UserSquare2, Gavel, Briefcase } from 'lucide-vue-next'
 
 const store = useAppStore()
+
+onMounted(() => {
+  store.fetchData()
+})
 
 const stats = computed(() => [
   { label: 'Total Leads', value: store.leads.length, icon: Users, colorClass: 'bg-blue-100 text-blue-600', trend: '+12%' },

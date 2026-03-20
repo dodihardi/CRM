@@ -10,24 +10,83 @@
         <div v-else class="w-8 h-8 bg-emerald-400 rounded-lg flex items-center justify-center text-slate-900 font-bold">N</div>
       </div>
       
-      <nav class="flex-1 px-4 space-y-1 overflow-y-auto overflow-x-hidden">
+      <nav class="flex-1 px-4 space-y-2 overflow-y-auto overflow-x-hidden">
+        <!-- Dashboard -->
         <router-link 
-          v-for="item in navItems" 
-          :key="item.name"
-          :to="item.path"
+          to="/"
           class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative"
           :class="[
-            $route.name === item.routeName ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            $route.name === 'dashboard' ? 'bg-slate-800 text-emerald-400' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
           ]"
         >
-          <component :is="item.icon" class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
-          <span v-if="!isSidebarCollapsed" class="truncate">{{ item.name }}</span>
-          
-          <!-- Tooltip for collapsed state -->
+          <LayoutDashboard class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
+          <span v-if="!isSidebarCollapsed" class="truncate">Dashboard</span>
           <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-            {{ item.name }}
+            Dashboard
           </div>
         </router-link>
+
+        <!-- Master Data -->
+        <div class="space-y-1">
+          <button 
+            @click="toggleGroup('master')"
+            class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Database class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
+            <span v-if="!isSidebarCollapsed" class="truncate flex-1 text-left">Master Data</span>
+            <ChevronDown v-if="!isSidebarCollapsed" class="w-4 h-4 transition-transform duration-200" :class="{'rotate-180': openGroups.master}" />
+            
+            <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+              Master Data
+            </div>
+          </button>
+          
+          <div v-if="openGroups.master && !isSidebarCollapsed" class="pl-4 space-y-1">
+            <router-link 
+              v-for="item in filteredMasterItems" 
+              :key="item.name"
+              :to="item.path"
+              class="flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors group relative"
+              :class="[
+                $route.name === item.routeName ? 'bg-slate-800/50 text-emerald-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              ]"
+            >
+              <component :is="item.icon" class="w-4 h-4 mr-3 flex-shrink-0" />
+              <span class="truncate">{{ item.name }}</span>
+            </router-link>
+          </div>
+        </div>
+
+        <!-- Transaction -->
+        <div class="space-y-1">
+          <button 
+            @click="toggleGroup('transaction')"
+            class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <ArrowRightLeft class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
+            <span v-if="!isSidebarCollapsed" class="truncate flex-1 text-left">Transaction</span>
+            <ChevronDown v-if="!isSidebarCollapsed" class="w-4 h-4 transition-transform duration-200" :class="{'rotate-180': openGroups.transaction}" />
+            
+            <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+              Transaction
+            </div>
+          </button>
+          
+          <div v-if="openGroups.transaction && !isSidebarCollapsed" class="pl-4 space-y-1">
+            <router-link 
+              v-for="item in transactionItems" 
+              :key="item.name"
+              :to="item.path"
+              class="flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors group relative"
+              :class="[
+                $route.name === item.routeName ? 'bg-slate-800/50 text-emerald-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+              ]"
+            >
+              <component :is="item.icon" class="w-4 h-4 mr-3 flex-shrink-0" />
+              <span class="truncate">{{ item.name }}</span>
+            </router-link>
+          </div>
+        </div>
 
         <!-- Local Deployment Section -->
         <div class="pt-4 pb-2 px-4" :class="[isSidebarCollapsed ? 'text-center' : '']">
@@ -51,10 +110,12 @@
       
       <div class="p-4 border-t border-slate-800">
         <div class="flex items-center" :class="[isSidebarCollapsed ? 'justify-center' : 'px-4 py-2']">
-          <div class="w-8 h-8 rounded-full bg-emerald-500 flex-shrink-0 flex items-center justify-center text-xs font-bold">JD</div>
+          <div class="w-8 h-8 rounded-full bg-emerald-500 flex-shrink-0 flex items-center justify-center text-xs font-bold">
+            {{ authStore.user?.name.split(' ').map(n => n[0]).join('') }}
+          </div>
           <div v-if="!isSidebarCollapsed" class="ml-3 truncate">
-            <p class="text-sm font-medium truncate">John Doe</p>
-            <p class="text-xs text-slate-400 truncate">Administrator</p>
+            <p class="text-sm font-medium truncate">{{ authStore.user?.name }}</p>
+            <p class="text-xs text-slate-400 truncate capitalize">{{ authStore.user?.role }}</p>
           </div>
         </div>
       </div>
@@ -95,13 +156,24 @@
           
           <div class="h-8 w-px bg-slate-200 mx-2"></div>
           
-          <div class="flex items-center space-x-3 cursor-pointer hover:bg-slate-50 p-1 rounded-lg transition-colors">
+          <div class="flex items-center space-x-3 cursor-pointer hover:bg-slate-50 p-1 rounded-lg transition-colors group relative">
             <div class="text-right hidden sm:block">
-              <p class="text-sm font-bold text-slate-900">John Doe</p>
-              <p class="text-[10px] text-slate-500 uppercase font-bold">Admin</p>
+              <p class="text-sm font-bold text-slate-900">{{ authStore.user?.name }}</p>
+              <p class="text-[10px] text-slate-500 uppercase font-bold">{{ authStore.user?.role }}</p>
             </div>
             <div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
-              <img src="https://picsum.photos/seed/admin/100/100" alt="Avatar" class="w-full h-full object-cover" />
+              <img :src="`https://picsum.photos/seed/${authStore.user?.username}/100/100`" alt="Avatar" class="w-full h-full object-cover" />
+            </div>
+            
+            <!-- User Dropdown -->
+            <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-50">
+              <button 
+                @click="handleLogout"
+                class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+              >
+                <LogOut class="w-4 h-4 mr-2" />
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -120,7 +192,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { 
   LayoutDashboard, 
   Users, 
@@ -132,24 +206,51 @@ import {
   Menu,
   Search,
   Bell,
-  ChevronLeft
+  ChevronLeft,
+  ChevronDown,
+  LogOut,
+  Database,
+  ArrowRightLeft
 } from 'lucide-vue-next'
 
+const authStore = useAuthStore()
+const router = useRouter()
 const isSidebarCollapsed = ref(false)
 const appUrl = process.env.APP_URL || '#'
+
+const openGroups = reactive({
+  master: true,
+  transaction: true
+})
+
+const toggleGroup = (group: 'master' | 'transaction') => {
+  openGroups[group] = !openGroups[group]
+}
 
 const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
 }
 
-const navItems = [
-  { name: 'Dashboard', path: '/', routeName: 'dashboard', icon: LayoutDashboard },
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
+}
+
+const masterItems = [
   { name: 'Leads', path: '/leads', routeName: 'leads-list', icon: Users },
   { name: 'Customers', path: '/customers', routeName: 'customers-list', icon: UserSquare2 },
+  { name: 'Users', path: '/users', routeName: 'users-list', icon: Users, adminOnly: true },
+]
+
+const transactionItems = [
   { name: 'Auctions', path: '/auctions', routeName: 'auctions-list', icon: Gavel },
   { name: 'Projects', path: '/projects', routeName: 'projects-list', icon: Briefcase },
   { name: 'Activities', path: '/activities', routeName: 'activities', icon: History },
 ]
+
+const filteredMasterItems = computed(() => {
+  return masterItems.filter(item => !item.adminOnly || authStore.isAdmin)
+})
 </script>
 
 <style scoped>

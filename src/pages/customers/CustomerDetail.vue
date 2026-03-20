@@ -67,10 +67,23 @@
               <span class="text-sm">{{ customer.email }}</span>
             </div>
             <div class="flex items-center text-slate-600">
+              <Phone class="w-4 h-4 mr-3" />
+              <span class="text-sm">{{ customer.phone }}</span>
+            </div>
+            <div class="flex items-center text-slate-600">
               <Building2 class="w-4 h-4 mr-3" />
               <span class="text-sm">{{ customer.company }}</span>
             </div>
+            <div class="flex items-start text-slate-600">
+              <MapPin class="w-4 h-4 mr-3 mt-1" />
+              <span class="text-sm">{{ customer.address }}</span>
+            </div>
           </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Notes</h3>
+          <p class="text-sm text-slate-600 leading-relaxed">{{ customer.notes }}</p>
         </div>
       </aside>
     </div>
@@ -81,7 +94,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { ArrowLeft, Mail, Building2 } from 'lucide-vue-next'
+import { ArrowLeft, Mail, Building2, Phone, MapPin } from 'lucide-vue-next'
 
 const route = useRoute()
 const store = useAppStore()

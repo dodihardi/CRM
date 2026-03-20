@@ -16,7 +16,7 @@
         </div>
       </div>
       <div class="flex gap-3">
-        <button class="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors">
+        <button @click="openEditProjectModal" class="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors">
           Edit Project
         </button>
       </div>
@@ -32,25 +32,67 @@
               <span class="font-bold text-emerald-600 mr-1">{{ completedTasks }}</span> / {{ project.tasks.length }} Completed
             </div>
           </div>
-          <div class="p-6 space-y-4">
-            <div v-for="task in project.tasks" :key="task.id" class="flex items-center p-4 bg-slate-50 rounded-xl border border-slate-100 group">
-              <button 
-                @click="task.completed = !task.completed"
-                class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all"
-                :class="task.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'"
-              >
-                <Check v-if="task.completed" class="w-4 h-4" />
-              </button>
-              <span class="ml-4 font-medium" :class="task.completed ? 'text-slate-400 line-through' : 'text-slate-700'">
-                {{ task.title }}
-              </span>
-            </div>
-            <div class="pt-4">
-              <button class="text-emerald-600 text-sm font-bold flex items-center hover:text-emerald-700">
-                <Plus class="w-4 h-4 mr-1" />
-                Add Task
-              </button>
-            </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 border-b border-slate-100 text-slate-500 text-[10px] uppercase tracking-wider">
+                <tr>
+                  <th class="px-6 py-3 font-semibold w-12">Done</th>
+                  <th class="px-6 py-3 font-semibold">Task Title</th>
+                  <th class="px-6 py-3 font-semibold">Begin Date</th>
+                  <th class="px-6 py-3 font-semibold">End Date</th>
+                  <th class="px-6 py-3 font-semibold">PIC</th>
+                  <th class="px-6 py-3 font-semibold w-20">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-for="task in project.tasks" :key="task.id" class="hover:bg-slate-50 transition-colors group">
+                  <td class="px-6 py-4">
+                    <button 
+                      @click="toggleTask(task)"
+                      class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all"
+                      :class="task.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'"
+                    >
+                      <Check v-if="task.completed" class="w-4 h-4" />
+                    </button>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class="font-medium text-sm" :class="task.completed ? 'text-slate-400 line-through' : 'text-slate-700'">
+                      {{ task.title }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 text-slate-500 text-sm whitespace-nowrap">
+                    {{ new Date(task.beginDate).toLocaleDateString() }}
+                  </td>
+                  <td class="px-6 py-4 text-slate-500 text-sm whitespace-nowrap">
+                    {{ new Date(task.endDate).toLocaleDateString() }}
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center">
+                      <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 mr-2">
+                        {{ task.pic.charAt(0) }}
+                      </div>
+                      <span class="text-sm text-slate-600 whitespace-nowrap">{{ task.pic }}</span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button @click="openEditTaskModal(task)" class="text-slate-400 hover:text-emerald-600">
+                        <Pencil class="w-4 h-4" />
+                      </button>
+                      <button @click="deleteTask(task.id)" class="text-slate-400 hover:text-red-600">
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="p-6 bg-slate-50/50 border-t border-slate-100">
+            <button @click="openAddTaskModal" class="text-emerald-600 text-sm font-bold flex items-center hover:text-emerald-700">
+              <Plus class="w-4 h-4 mr-1" />
+              Add Task
+            </button>
           </div>
         </section>
 
@@ -102,19 +144,145 @@
           </div>
           <p class="text-xs text-emerald-100">{{ progress }}% of tasks completed</p>
         </div>
+
+        <!-- Cost Planning & Realization -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest">Cost Realization</h3>
+            <button v-if="authStore.isAdmin" @click="openCostModal" class="text-emerald-600 hover:text-emerald-700">
+              <Settings class="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs text-slate-400 font-bold uppercase mb-1">Planned Cost</p>
+              <p class="text-xl font-bold text-slate-900">${{ project.plannedCost.toLocaleString() }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-400 font-bold uppercase mb-1">Actual Realization</p>
+              <p class="text-xl font-bold" :class="project.actualCost > project.plannedCost ? 'text-red-600' : 'text-emerald-600'">
+                ${{ project.actualCost.toLocaleString() }}
+              </p>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-100">
+              <div class="flex justify-between text-xs font-bold mb-2">
+                <span class="text-slate-500">Utilization</span>
+                <span :class="costUtilization > 100 ? 'text-red-600' : 'text-emerald-600'">{{ costUtilization }}%</span>
+              </div>
+              <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                <div 
+                  class="h-full rounded-full transition-all duration-500" 
+                  :class="costUtilization > 100 ? 'bg-red-500' : 'bg-emerald-500'"
+                  :style="{ width: `${Math.min(costUtilization, 100)}%` }"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </aside>
+    </div>
+
+    <!-- Edit Project Modal -->
+    <div v-if="showEditProjectModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="p-8">
+          <h2 class="text-2xl font-bold text-slate-900 mb-6">Edit Project</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">Title</label>
+              <input v-model="editProjectForm.title" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">Status</label>
+              <select v-model="editProjectForm.status" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                <option value="planned">Planned</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="p-6 bg-slate-50 flex gap-3">
+          <button @click="showEditProjectModal = false" class="flex-1 px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button @click="saveProject" class="flex-1 px-4 py-2 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div v-if="showTaskModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="p-8">
+          <h2 class="text-2xl font-bold text-slate-900 mb-6">{{ isEditingTask ? 'Edit Task' : 'Add Task' }}</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">Task Title</label>
+              <input v-model="taskForm.title" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-bold text-slate-700 mb-1">Begin Date</label>
+                <input v-model="taskForm.beginDate" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+              <div>
+                <label class="block text-sm font-bold text-slate-700 mb-1">End Date</label>
+                <input v-model="taskForm.endDate" type="date" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">PIC</label>
+              <input v-model="taskForm.pic" type="text" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+            <div class="flex items-center">
+              <input v-model="taskForm.completed" type="checkbox" id="taskCompleted" class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+              <label for="taskCompleted" class="ml-2 text-sm font-medium text-slate-700">Completed</label>
+            </div>
+          </div>
+        </div>
+        <div class="p-6 bg-slate-50 flex gap-3">
+          <button @click="showTaskModal = false" class="flex-1 px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button @click="submitTask" class="flex-1 px-4 py-2 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cost Edit Modal -->
+    <div v-if="showCostModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="p-8">
+          <h2 class="text-2xl font-bold text-slate-900 mb-6">Update Project Costs</h2>
+          <div class="space-y-6">
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-2">Planned Cost ($)</label>
+              <input v-model.number="costForm.planned" type="number" class="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-2">Actual Realization ($)</label>
+              <input v-model.number="costForm.actual" type="number" class="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+          </div>
+        </div>
+        <div class="p-6 bg-slate-50 flex gap-3">
+          <button @click="showCostModal = false" class="flex-1 px-4 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+          <button @click="saveCosts" class="flex-1 px-4 py-3 rounded-xl font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">Save Changes</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { ArrowLeft, Check, Plus } from 'lucide-vue-next'
+import { useAuthStore } from '@/stores/auth'
+import { ArrowLeft, Check, Plus, Settings, Pencil, Trash2 } from 'lucide-vue-next'
 
 const route = useRoute()
 const store = useAppStore()
+const authStore = useAuthStore()
 
 const project = computed(() => store.projects.find(p => p.id === route.params.id))
 const projectActivities = computed(() => store.activities.filter(a => a.project_id === route.params.id))
@@ -136,6 +304,117 @@ const progress = computed(() => {
   if (!project.value || project.value.tasks.length === 0) return 0
   return Math.round((completedTasks.value / project.value.tasks.length) * 100)
 })
+
+const costUtilization = computed(() => {
+  if (!project.value || project.value.plannedCost === 0) return 0
+  return Math.round((project.value.actualCost / project.value.plannedCost) * 100)
+})
+
+// Edit Project
+const showEditProjectModal = ref(false)
+const editProjectForm = reactive({ title: '', status: '' })
+const openEditProjectModal = () => {
+  if (project.value) {
+    editProjectForm.title = project.value.title
+    editProjectForm.status = project.value.status
+    showEditProjectModal.value = true
+  }
+}
+const saveProject = async () => {
+  if (project.value) {
+    try {
+      await store.updateProject(project.value.id, editProjectForm)
+      showEditProjectModal.value = false
+    } catch (err) {
+      alert('Failed to update project')
+    }
+  }
+}
+
+// Tasks
+const showTaskModal = ref(false)
+const isEditingTask = ref(false)
+const currentTaskId = ref('')
+const taskForm = reactive({ title: '', completed: false, beginDate: '', endDate: '', pic: '' })
+
+const openAddTaskModal = () => {
+  isEditingTask.value = false
+  taskForm.title = ''
+  taskForm.completed = false
+  taskForm.beginDate = new Date().toISOString().split('T')[0]
+  taskForm.endDate = new Date().toISOString().split('T')[0]
+  taskForm.pic = ''
+  showTaskModal.value = true
+}
+
+const openEditTaskModal = (task: any) => {
+  isEditingTask.value = true
+  currentTaskId.value = task.id
+  taskForm.title = task.title
+  taskForm.completed = task.completed
+  taskForm.beginDate = new Date(task.beginDate).toISOString().split('T')[0]
+  taskForm.endDate = new Date(task.endDate).toISOString().split('T')[0]
+  taskForm.pic = task.pic
+  showTaskModal.value = true
+}
+
+const submitTask = async () => {
+  if (project.value) {
+    try {
+      if (isEditingTask.value) {
+        await store.updateProjectTask(currentTaskId.value, taskForm)
+      } else {
+        await store.addProjectTask(project.value.id, taskForm)
+      }
+      showTaskModal.value = false
+    } catch (err) {
+      alert('Failed to save task')
+    }
+  }
+}
+
+const toggleTask = async (task: any) => {
+  try {
+    await store.updateProjectTask(task.id, { ...task, completed: !task.completed })
+  } catch (err) {
+    alert('Failed to update task status')
+  }
+}
+
+const deleteTask = async (id: string) => {
+  if (confirm('Delete this task?')) {
+    try {
+      await store.deleteProjectTask(id)
+    } catch (err) {
+      alert('Failed to delete task')
+    }
+  }
+}
+
+const showCostModal = ref(false)
+const costForm = reactive({
+  planned: 0,
+  actual: 0
+})
+
+const openCostModal = () => {
+  if (project.value) {
+    costForm.planned = project.value.plannedCost
+    costForm.actual = project.value.actualCost
+    showCostModal.value = true
+  }
+}
+
+const saveCosts = async () => {
+  if (project.value) {
+    try {
+      await store.updateProjectCosts(project.value.id, costForm.planned, costForm.actual)
+      showCostModal.value = false
+    } catch (err) {
+      alert('Failed to update project costs')
+    }
+  }
+}
 
 const getStatusClass = (status: string) => {
   switch (status) {
