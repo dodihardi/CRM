@@ -150,14 +150,55 @@ export const initDb = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS activities (
         id TEXT PRIMARY KEY,
-        type TEXT NOT NULL, -- 'lead', 'customer', 'auction', 'project'
+        type TEXT NOT NULL, -- 'lead', 'customer', 'auction', 'project', 'sales_order'
         sub_type TEXT NOT NULL,
         content TEXT NOT NULL,
         timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         lead_id TEXT,
         customer_id TEXT,
         auction_id TEXT,
-        project_id TEXT
+        project_id TEXT,
+        sales_order_id TEXT
+      )
+    `);
+
+    // Sales Orders Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_orders (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT REFERENCES customers(id),
+        project_id TEXT REFERENCES projects(id),
+        order_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'draft',
+        total_amount NUMERIC DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Sales Order Items Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_order_items (
+        id TEXT PRIMARY KEY,
+        sales_order_id TEXT REFERENCES sales_orders(id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price NUMERIC NOT NULL DEFAULT 0,
+        total_price NUMERIC NOT NULL DEFAULT 0
+      )
+    `);
+
+    // Documents Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        url TEXT NOT NULL,
+        entity_type TEXT NOT NULL, -- 'lead', 'customer', 'auction', 'project', 'sales_order'
+        entity_id TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `);
 

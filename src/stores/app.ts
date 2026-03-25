@@ -12,6 +12,27 @@ export interface Activity {
   customer_id?: string
   auction_id?: string
   project_id?: string
+  sales_order_id?: string
+}
+
+export interface SalesOrderItem {
+  id: string
+  description: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
+
+export interface SalesOrder {
+  id: string
+  customerId: string
+  projectId?: string
+  orderDate: string
+  status: 'draft' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'
+  totalAmount: number
+  notes: string
+  items: SalesOrderItem[]
+  createdAt: string
 }
 
 export interface Lead {
@@ -97,12 +118,24 @@ export interface Project {
   createdAt: string
 }
 
+export interface Document {
+  id: string
+  name: string
+  type: string
+  size: number
+  url: string
+  entityType: 'lead' | 'customer' | 'auction' | 'project' | 'task' | 'auction_item' | 'auction_cost'
+  entityId: string
+  createdAt: string
+}
+
 export const useAppStore = defineStore('app', () => {
   const authStore = useAuthStore()
   const leads = ref<Lead[]>([])
   const customers = ref<Customer[]>([])
   const auctions = ref<Auction[]>([])
   const projects = ref<Project[]>([])
+  const salesOrders = ref<SalesOrder[]>([])
   const activities = ref<Activity[]>([])
 
   const isLoading = ref(false)
@@ -119,11 +152,12 @@ export const useAppStore = defineStore('app', () => {
     error.value = null
     try {
       const headers = { 'Authorization': `Bearer ${authStore.token}` }
-      const [leadsRes, customersRes, auctionsRes, projectsRes, activitiesRes] = await Promise.all([
+      const [leadsRes, customersRes, auctionsRes, projectsRes, salesOrdersRes, activitiesRes] = await Promise.all([
         fetch('/api/leads', { headers }),
         fetch('/api/customers', { headers }),
         fetch('/api/auctions', { headers }),
         fetch('/api/projects', { headers }),
+        fetch('/api/sales-orders', { headers }),
         fetch('/api/activities', { headers })
       ])
 
@@ -136,6 +170,7 @@ export const useAppStore = defineStore('app', () => {
       customers.value = await customersRes.json()
       auctions.value = await auctionsRes.json()
       projects.value = await projectsRes.json()
+      salesOrders.value = await salesOrdersRes.json()
       activities.value = await activitiesRes.json()
     } catch (err) {
       error.value = 'Failed to fetch data'
@@ -239,6 +274,7 @@ export const useAppStore = defineStore('app', () => {
     customers,
     auctions,
     projects,
+    salesOrders,
     activities,
     isLoading,
     error,
@@ -248,6 +284,33 @@ export const useAppStore = defineStore('app', () => {
     scheduleAuction,
     startAuction,
     completeAuction,
+    // Sales Orders CRUD
+    createSalesOrder: async (so: Partial<SalesOrder>) => {
+      const res = await fetch('/api/sales-orders', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(so)
+      })
+      if (!res.ok) throw new Error('Failed to create sales order')
+      await fetchData()
+    },
+    updateSalesOrder: async (id: string, so: Partial<SalesOrder>) => {
+      const res = await fetch(`/api/sales-orders/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(so)
+      })
+      if (!res.ok) throw new Error('Failed to update sales order')
+      await fetchData()
+    },
+    deleteSalesOrder: async (id: string) => {
+      const res = await fetch(`/api/sales-orders/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+      if (!res.ok) throw new Error('Failed to delete sales order')
+      await fetchData()
+    },
     // Leads CRUD
     createLead: async (lead: Partial<Lead>) => {
       const res = await fetch('/api/leads', {
@@ -472,6 +535,35 @@ export const useAppStore = defineStore('app', () => {
       })
       if (!res.ok) throw new Error('Failed to delete task')
       await fetchData()
+    },
+    // Documents
+    fetchDocuments: async (entityType: string, entityId: string) => {
+      const res = await fetch(`/api/documents/${entityType}/${entityId}`, {
+        headers: { 'Authorization': `Bearer ${authStore.token}` }
+      })
+      if (!res.ok) throw new Error('Failed to fetch documents')
+      return await res.json() as Document[]
+    },
+    uploadDocument: async (entityType: string, entityId: string, file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('entityType', entityType)
+      formData.append('entityId', entityId)
+
+      const res = await fetch('/api/documents/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authStore.token}` },
+        body: formData
+      })
+      if (!res.ok) throw new Error('Failed to upload document')
+      return await res.json() as Document
+    },
+    deleteDocument: async (id: string) => {
+      const res = await fetch(`/api/documents/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+      if (!res.ok) throw new Error('Failed to delete document')
     }
   }
 })

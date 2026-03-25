@@ -30,7 +30,7 @@
                     <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500">
                       {{ activity.type }}
                     </span>
-                    <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500">
+                    <span v-if="activity.sub_type" class="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500">
                       {{ activity.sub_type.replace('_', ' ') }}
                     </span>
                   </div>

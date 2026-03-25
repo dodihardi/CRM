@@ -41,6 +41,7 @@
                   <th class="px-6 py-3 font-semibold">Begin Date</th>
                   <th class="px-6 py-3 font-semibold">End Date</th>
                   <th class="px-6 py-3 font-semibold">PIC</th>
+                  <th class="px-6 py-3 font-semibold w-24">Docs</th>
                   <th class="px-6 py-3 font-semibold w-20">Actions</th>
                 </tr>
               </thead>
@@ -75,6 +76,11 @@
                     </div>
                   </td>
                   <td class="px-6 py-4">
+                    <button @click="openTaskDocs(task)" class="p-2 text-slate-400 hover:text-emerald-600 transition-colors flex items-center">
+                      <FileText class="w-4 h-4" />
+                    </button>
+                  </td>
+                  <td class="px-6 py-4">
                     <div class="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button @click="openEditTaskModal(task)" class="text-slate-400 hover:text-emerald-600">
                         <Pencil class="w-4 h-4" />
@@ -95,6 +101,9 @@
             </button>
           </div>
         </section>
+
+        <!-- Documents -->
+        <DocumentSection entityType="project" :entityId="project.id" />
 
         <!-- Project Timeline -->
         <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
@@ -270,6 +279,24 @@
         </div>
       </div>
     </div>
+
+    <!-- Task Documents Modal -->
+    <div v-if="showTaskDocsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-slate-900">Task Documents</h2>
+            <p class="text-sm text-slate-500">{{ selectedTask?.title }}</p>
+          </div>
+          <button @click="showTaskDocsModal = false" class="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X class="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+        <div class="p-6 max-h-[70vh] overflow-y-auto">
+          <DocumentSection v-if="selectedTask" entityType="task" :entityId="selectedTask.id" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -278,7 +305,8 @@ import { computed, ref, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { ArrowLeft, Check, Plus, Settings, Pencil, Trash2 } from 'lucide-vue-next'
+import DocumentSection from '@/components/DocumentSection.vue'
+import { ArrowLeft, Check, Plus, Settings, Pencil, Trash2, FileText, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const store = useAppStore()
@@ -392,6 +420,14 @@ const deleteTask = async (id: string) => {
 }
 
 const showCostModal = ref(false)
+const showTaskDocsModal = ref(false)
+const selectedTask = ref<any>(null)
+
+const openTaskDocs = (task: any) => {
+  selectedTask.value = task
+  showTaskDocsModal.value = true
+}
+
 const costForm = reactive({
   planned: 0,
   actual: 0

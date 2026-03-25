@@ -62,6 +62,9 @@
           </div>
         </div>
 
+        <!-- Documents -->
+        <DocumentSection entityType="lead" :entityId="lead.id" />
+
         <!-- Activity Timeline -->
         <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
           <h2 class="text-xl font-bold text-slate-900 mb-6">Activity Timeline</h2>
@@ -117,6 +120,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import DocumentSection from '@/components/DocumentSection.vue'
 import { 
   ArrowLeft, 
   Phone, 

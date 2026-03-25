@@ -8,9 +8,51 @@ import { fileURLToPath } from 'url';
 import * as db from './db.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/gif'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, Word, and Images are allowed.'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
 
@@ -19,6 +61,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use('/uploads', express.static(uploadsDir));
 
   // Authentication Middleware
   const authenticateToken = (req: any, res: any, next: any) => {
@@ -125,13 +168,25 @@ async function startServer() {
   const mapActivity = (row: any) => ({
     id: row.id,
     type: row.type,
-    subType: row.sub_type,
+    sub_type: row.sub_type,
     content: row.content,
     timestamp: row.timestamp,
-    leadId: row.lead_id,
+    lead_id: row.lead_id,
+    customer_id: row.customer_id,
+    auction_id: row.auction_id,
+    project_id: row.project_id,
+    sales_order_id: row.sales_order_id
+  });
+
+  const mapSalesOrder = (row: any) => ({
+    id: row.id,
     customerId: row.customer_id,
-    auctionId: row.auction_id,
-    projectId: row.project_id
+    projectId: row.project_id,
+    orderDate: row.order_date,
+    status: row.status,
+    totalAmount: Number(row.total_amount),
+    notes: row.notes,
+    createdAt: row.created_at
   });
 
   // API Routes (Protected)
@@ -236,12 +291,205 @@ async function startServer() {
     }
   });
 
+  app.get('/api/sales-orders', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT * FROM sales_orders ORDER BY created_at DESC');
+      const salesOrders = [];
+
+      for (const row of result.rows) {
+        const itemsResult = await db.query('SELECT * FROM sales_order_items WHERE sales_order_id = $1', [row.id]);
+        salesOrders.push({
+          ...mapSalesOrder(row),
+          items: itemsResult.rows.map(i => ({
+            id: i.id,
+            description: i.description,
+            quantity: i.quantity,
+            unitPrice: Number(i.unit_price),
+            totalPrice: Number(i.total_price)
+          }))
+        });
+      }
+      res.json(salesOrders);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch sales orders' });
+    }
+  });
+
+  app.post('/api/sales-orders', authenticateToken, checkRole(['admin', 'staff']), async (req, res) => {
+    const { customerId, projectId, orderDate, status, totalAmount, notes, items } = req.body;
+    try {
+      const id = 'SO' + Date.now();
+      await db.query('BEGIN');
+      
+      const result = await db.query(
+        'INSERT INTO sales_orders (id, customer_id, project_id, order_date, status, total_amount, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        [id, customerId, projectId, orderDate || new Date().toISOString(), status || 'draft', totalAmount || 0, notes, new Date().toISOString()]
+      );
+
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const itemId = 'SOI' + Date.now() + Math.random().toString(36).substr(2, 5);
+          await db.query(
+            'INSERT INTO sales_order_items (id, sales_order_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
+            [itemId, id, item.description, item.quantity, item.unitPrice, item.totalPrice]
+          );
+        }
+      }
+
+      const activityId = 'ACT' + Date.now();
+      await db.query(
+        'INSERT INTO activities (id, type, sub_type, content, timestamp, customer_id, project_id, sales_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [activityId, 'sales_order', 'creation', `Sales Order ${id} created`, new Date().toISOString(), customerId, projectId, id]
+      );
+
+      await db.query('COMMIT');
+      res.status(201).json({ ...mapSalesOrder(result.rows[0]), items: items || [] });
+    } catch (err) {
+      await db.query('ROLLBACK');
+      res.status(500).json({ error: 'Failed to create sales order' });
+    }
+  });
+
+  app.put('/api/sales-orders/:id', authenticateToken, checkRole(['admin', 'staff']), async (req, res) => {
+    const { id } = req.params;
+    const { customerId, projectId, orderDate, status, totalAmount, notes, items } = req.body;
+    try {
+      await db.query('BEGIN');
+      
+      const result = await db.query(
+        'UPDATE sales_orders SET customer_id = $1, project_id = $2, order_date = $3, status = $4, total_amount = $5, notes = $6 WHERE id = $7 RETURNING *',
+        [customerId, projectId, orderDate, status, totalAmount, notes, id]
+      );
+
+      if (result.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(404).json({ error: 'Sales order not found' });
+      }
+
+      // Simple approach: delete existing items and re-insert
+      await db.query('DELETE FROM sales_order_items WHERE sales_order_id = $1', [id]);
+      
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const itemId = 'SOI' + Date.now() + Math.random().toString(36).substr(2, 5);
+          await db.query(
+            'INSERT INTO sales_order_items (id, sales_order_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
+            [itemId, id, item.description, item.quantity, item.unitPrice, item.totalPrice]
+          );
+        }
+      }
+
+      const activityId = 'ACT' + Date.now();
+      await db.query(
+        'INSERT INTO activities (id, type, sub_type, content, timestamp, customer_id, project_id, sales_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [activityId, 'sales_order', 'update', `Sales Order ${id} updated`, new Date().toISOString(), customerId, projectId, id]
+      );
+
+      await db.query('COMMIT');
+      res.json({ ...mapSalesOrder(result.rows[0]), items: items || [] });
+    } catch (err) {
+      await db.query('ROLLBACK');
+      res.status(500).json({ error: 'Failed to update sales order' });
+    }
+  });
+
+  app.delete('/api/sales-orders/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.query('DELETE FROM sales_orders WHERE id = $1', [id]);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete sales order' });
+    }
+  });
+
   app.get('/api/activities', authenticateToken, async (req, res) => {
     try {
       const result = await db.query('SELECT * FROM activities ORDER BY timestamp DESC');
       res.json(result.rows.map(mapActivity));
     } catch (err) {
       res.status(500).json({ error: 'Failed to fetch activities' });
+    }
+  });
+
+  // Document Routes
+  app.post('/api/documents/upload', authenticateToken, upload.single('file'), async (req: any, res) => {
+    const { entityType, entityId } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    if (!entityType || !entityId) {
+      return res.status(400).json({ error: 'Entity type and ID are required' });
+    }
+
+    const docId = 'DOC' + uuidv4().slice(0, 8).toUpperCase();
+    const url = `/uploads/${file.filename}`;
+
+    try {
+      await db.query(
+        'INSERT INTO documents (id, name, type, size, url, entity_type, entity_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [docId, file.originalname, file.mimetype, file.size, url, entityType, entityId]
+      );
+
+      res.status(201).json({
+        id: docId,
+        name: file.originalname,
+        type: file.mimetype,
+        size: file.size,
+        url,
+        entityType,
+        entityId,
+        createdAt: new Date()
+      });
+    } catch (err) {
+      console.error('Failed to save document metadata:', err);
+      res.status(500).json({ error: 'Failed to save document metadata' });
+    }
+  });
+
+  app.get('/api/documents/:entityType/:entityId', authenticateToken, async (req, res) => {
+    const { entityType, entityId } = req.params;
+    try {
+      const result = await db.query(
+        'SELECT * FROM documents WHERE entity_type = $1 AND entity_id = $2 ORDER BY created_at DESC',
+        [entityType, entityId]
+      );
+      res.json(result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        size: row.size,
+        url: row.url,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        createdAt: row.created_at
+      })));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch documents' });
+    }
+  });
+
+  app.delete('/api/documents/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+      // First get the file path to delete it from disk
+      const result = await db.query('SELECT url FROM documents WHERE id = $1', [id]);
+      if (result.rows.length > 0) {
+        const url = result.rows[0].url;
+        const filename = url.split('/').pop();
+        const filePath = path.join(uploadsDir, filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+      
+      await db.query('DELETE FROM documents WHERE id = $1', [id]);
+      res.json({ message: 'Document deleted successfully' });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete document' });
     }
   });
 

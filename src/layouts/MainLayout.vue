@@ -245,6 +245,7 @@ const masterItems = [
 const transactionItems = [
   { name: 'Auctions', path: '/auctions', routeName: 'auctions-list', icon: Gavel },
   { name: 'Projects', path: '/projects', routeName: 'projects-list', icon: Briefcase },
+  { name: 'Sales Orders', path: '/sales-orders', routeName: 'sales-orders-list', icon: ArrowRightLeft },
   { name: 'Activities', path: '/activities', routeName: 'activities', icon: History },
 ]
 

@@ -117,9 +117,14 @@
                   <p class="text-xs text-slate-400 uppercase font-medium">Starting Price</p>
                   <p class="text-lg font-bold text-slate-900">${{ item.startingPrice.toLocaleString() }}</p>
                 </div>
-                <button v-if="authStore.isStaff" @click="deleteItem(item.id)" class="text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all">
-                  <Trash2 class="w-5 h-5" />
-                </button>
+                <div class="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all">
+                  <button @click="openItemDocs(item)" class="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Documents">
+                    <FileText class="w-5 h-5" />
+                  </button>
+                  <button v-if="authStore.isStaff" @click="deleteItem(item.id)" class="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Delete">
+                    <Trash2 class="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -135,15 +140,15 @@
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
             <div v-for="p in auction.participants" :key="p.id" class="flex items-center justify-between p-4 bg-slate-50 rounded-xl group">
-              <div class="flex items-center">
+              <router-link :to="p.type === 'customer' ? `/customers/${p.participantId}` : `/leads/${p.participantId}`" class="flex items-center hover:text-emerald-600 transition-colors">
                 <div class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-600">
                   {{ p.name.charAt(0) }}
                 </div>
                 <div class="ml-3">
-                  <p class="font-bold text-slate-900 text-sm">{{ p.name }}</p>
+                  <p class="font-bold text-sm">{{ p.name }}</p>
                   <p class="text-[10px] text-slate-400 uppercase font-bold">{{ p.type }}</p>
                 </div>
-              </div>
+              </router-link>
               <button v-if="authStore.isStaff" @click="deleteParticipant(p.id)" class="text-slate-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all">
                 <Trash2 class="w-4 h-4" />
               </button>
@@ -167,6 +172,7 @@
                   <th class="px-6 py-3 font-semibold">Estimated</th>
                   <th class="px-6 py-3 font-semibold">Actual</th>
                   <th class="px-6 py-3 font-semibold">Status</th>
+                  <th class="px-6 py-3 font-semibold w-24">Docs</th>
                   <th class="px-6 py-3 font-semibold w-20">Actions</th>
                 </tr>
               </thead>
@@ -179,6 +185,11 @@
                     <span :class="getCostStatusClass(cp.status)" class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
                       {{ cp.status }}
                     </span>
+                  </td>
+                  <td class="px-6 py-4">
+                    <button @click="openCostDocs(cp)" class="p-2 text-slate-400 hover:text-emerald-600 transition-colors flex items-center">
+                      <FileText class="w-4 h-4" />
+                    </button>
                   </td>
                   <td class="px-6 py-4">
                     <div class="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -195,11 +206,35 @@
             </table>
           </div>
         </section>
+
+        <!-- Documents -->
+        <DocumentSection entityType="auction" :entityId="auction.id" />
+
+        <!-- Activity History -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+          <h2 class="text-xl font-bold text-slate-900 mb-6">Auction Activity</h2>
+          <div class="space-y-8">
+            <div v-if="auctionActivities.length === 0" class="text-center text-slate-500 py-4">
+              No activity recorded for this auction.
+            </div>
+            <div v-for="activity in auctionActivities" :key="activity.id" class="flex">
+              <div class="flex flex-col items-center mr-6">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 mt-2"></div>
+                <div class="w-0.5 flex-1 bg-slate-100 my-1"></div>
+              </div>
+              <div class="pb-4">
+                <p class="text-sm text-slate-900">{{ activity.content }}</p>
+                <p class="text-xs text-slate-400">{{ new Date(activity.timestamp).toLocaleString() }}</p>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- Result Sidebar -->
-      <aside v-if="auction.status === 'completed'" class="space-y-6">
-        <div class="bg-slate-900 text-white p-8 rounded-2xl shadow-xl relative overflow-hidden">
+      <!-- Result & Info Sidebar -->
+      <aside class="space-y-6">
+        <!-- Auction Result (if completed) -->
+        <div v-if="auction.status === 'completed'" class="bg-slate-900 text-white p-8 rounded-2xl shadow-xl relative overflow-hidden">
           <div class="absolute top-0 right-0 p-4 opacity-10">
             <Trophy class="w-24 h-24" />
           </div>
@@ -213,15 +248,44 @@
               <p class="text-slate-400 text-sm mb-1">Final Price</p>
               <p class="text-3xl font-bold text-emerald-400">${{ auction.finalPrice?.toLocaleString() }}</p>
             </div>
-            <div class="pt-4 border-t border-slate-800">
-              <router-link 
-                v-if="relatedProject"
-                :to="`/projects/${relatedProject.id}`"
-                class="flex items-center text-sm font-medium text-white hover:text-emerald-400 transition-colors"
-              >
-                View Linked Project
-                <ChevronRight class="w-4 h-4 ml-1" />
+          </div>
+        </div>
+
+        <!-- Linked Project & Customer Info -->
+        <div v-if="relatedProject" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Linked Project</h3>
+          <div class="space-y-4">
+            <router-link :to="`/projects/${relatedProject.id}`" class="block group">
+              <h4 class="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{{ relatedProject.title }}</h4>
+              <p class="text-xs text-slate-500 mt-1 uppercase font-bold tracking-wider">{{ relatedProject.status }}</p>
+            </router-link>
+            
+            <div v-if="relatedCustomer" class="pt-4 border-t border-slate-100">
+              <p class="text-xs text-slate-400 uppercase font-bold tracking-widest mb-2">Customer</p>
+              <router-link :to="`/customers/${relatedCustomer.id}`" class="flex items-center group">
+                <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs mr-3">
+                  {{ relatedCustomer.name.charAt(0) }}
+                </div>
+                <div>
+                  <p class="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{{ relatedCustomer.name }}</p>
+                  <p class="text-xs text-slate-500">{{ relatedCustomer.company }}</p>
+                </div>
               </router-link>
+            </div>
+          </div>
+        </div>
+
+        <!-- Auction Stats -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Auction Stats</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="p-3 bg-slate-50 rounded-xl text-center">
+              <p class="text-[10px] text-slate-400 uppercase font-bold mb-1">Items</p>
+              <p class="text-lg font-bold text-slate-900">{{ auction.items.length }}</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl text-center">
+              <p class="text-[10px] text-slate-400 uppercase font-bold mb-1">Participants</p>
+              <p class="text-lg font-bold text-slate-900">{{ auction.participants.length }}</p>
             </div>
           </div>
         </div>
@@ -427,6 +491,41 @@
         </div>
       </div>
     </div>
+
+    <!-- Item Documents Modal -->
+    <div v-if="showItemDocsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-slate-900">Item Documents</h2>
+            <p class="text-sm text-slate-500">{{ selectedItem?.name }}</p>
+          </div>
+          <button @click="showItemDocsModal = false" class="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X class="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+        <div class="p-6 max-h-[70vh] overflow-y-auto">
+          <DocumentSection v-if="selectedItem" entityType="auction_item" :entityId="selectedItem.id" />
+        </div>
+      </div>
+    </div>
+    <!-- Cost Documents Modal -->
+    <div v-if="showCostDocsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-slate-900">Cost Item Documents</h2>
+            <p class="text-sm text-slate-500">{{ selectedCost?.item }}</p>
+          </div>
+          <button @click="showCostDocsModal = false" class="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X class="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+        <div class="p-6 max-h-[70vh] overflow-y-auto">
+          <DocumentSection v-if="selectedCost" entityType="auction_cost" :entityId="selectedCost.id" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -435,17 +534,38 @@ import { ref, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { ArrowLeft, Package, Trophy, ChevronRight, Calendar, Plus, Pencil, Trash2 } from 'lucide-vue-next'
+import DocumentSection from '@/components/DocumentSection.vue'
+import { ArrowLeft, Package, Trophy, ChevronRight, Calendar, Plus, Pencil, Trash2, FileText, X } from 'lucide-vue-next'
 
 const route = useRoute()
 const store = useAppStore()
 const authStore = useAuthStore()
 
 const auction = computed(() => store.auctions.find(a => a.id === route.params.id))
+const auctionActivities = computed(() => store.activities.filter(a => a.auction_id === route.params.id))
 const relatedProject = computed(() => store.projects.find(p => p.auction_id === route.params.id))
+const relatedCustomer = computed(() => {
+  if (!relatedProject.value) return null
+  return store.customers.find(c => c.id === relatedProject.value?.customer_id)
+})
 
 // Edit Auction
 const showEditAuctionModal = ref(false)
+const showItemDocsModal = ref(false)
+const showCostDocsModal = ref(false)
+const selectedItem = ref<any>(null)
+const selectedCost = ref<any>(null)
+
+const openItemDocs = (item: any) => {
+  selectedItem.value = item
+  showItemDocsModal.value = true
+}
+
+const openCostDocs = (cp: any) => {
+  selectedCost.value = cp
+  showCostDocsModal.value = true
+}
+
 const editAuctionForm = reactive({ title: '', status: '' })
 const openEditAuctionModal = () => {
   if (auction.value) {

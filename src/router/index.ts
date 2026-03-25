@@ -2,13 +2,29 @@ import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 
+// Static imports for pages to avoid "module not loaded" issues
+import Login from '@/pages/Login.vue'
+import Dashboard from '@/pages/Dashboard.vue'
+import LeadsList from '@/pages/leads/LeadsList.vue'
+import LeadDetail from '@/pages/leads/LeadDetail.vue'
+import CustomersList from '@/pages/customers/CustomersList.vue'
+import CustomerDetail from '@/pages/customers/CustomerDetail.vue'
+import AuctionsList from '@/pages/auctions/AuctionsList.vue'
+import AuctionDetail from '@/pages/auctions/AuctionDetail.vue'
+import ProjectsList from '@/pages/projects/ProjectsList.vue'
+import ProjectDetail from '@/pages/projects/ProjectDetail.vue'
+import SalesOrdersList from '@/pages/sales-orders/SalesOrdersList.vue'
+import SalesOrderDetail from '@/pages/sales-orders/SalesOrderDetail.vue'
+import Activities from '@/pages/Activities.vue'
+import Users from '@/pages/Users.vue'
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/login',
       name: 'login',
-      component: () => import('@/pages/Login.vue'),
+      component: Login,
       meta: { guest: true }
     },
     {
@@ -19,57 +35,67 @@ const router = createRouter({
         {
           path: '',
           name: 'dashboard',
-          component: () => import('@/pages/Dashboard.vue')
+          component: Dashboard
         },
         {
           path: 'leads',
           name: 'leads-list',
-          component: () => import('@/pages/leads/LeadsList.vue')
+          component: LeadsList
         },
         {
           path: 'leads/:id',
           name: 'lead-detail',
-          component: () => import('@/pages/leads/LeadDetail.vue')
+          component: LeadDetail
         },
         {
           path: 'customers',
           name: 'customers-list',
-          component: () => import('@/pages/customers/CustomersList.vue')
+          component: CustomersList
         },
         {
           path: 'customers/:id',
           name: 'customer-detail',
-          component: () => import('@/pages/customers/CustomerDetail.vue')
+          component: CustomerDetail
         },
         {
           path: 'auctions',
           name: 'auctions-list',
-          component: () => import('@/pages/auctions/AuctionsList.vue')
+          component: AuctionsList
         },
         {
           path: 'auctions/:id',
           name: 'auction-detail',
-          component: () => import('@/pages/auctions/AuctionDetail.vue')
+          component: AuctionDetail
         },
         {
           path: 'projects',
           name: 'projects-list',
-          component: () => import('@/pages/projects/ProjectsList.vue')
+          component: ProjectsList
         },
         {
           path: 'projects/:id',
           name: 'project-detail',
-          component: () => import('@/pages/projects/ProjectDetail.vue')
+          component: ProjectDetail
+        },
+        {
+          path: 'sales-orders',
+          name: 'sales-orders-list',
+          component: SalesOrdersList
+        },
+        {
+          path: 'sales-orders/:id',
+          name: 'sales-order-detail',
+          component: SalesOrderDetail
         },
         {
           path: 'activities',
           name: 'activities',
-          component: () => import('@/pages/Activities.vue')
+          component: Activities
         },
         {
           path: 'users',
           name: 'users-list',
-          component: () => import('@/pages/Users.vue'),
+          component: Users,
           meta: { requiresAdmin: true }
         }
       ]
