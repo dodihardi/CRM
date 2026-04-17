@@ -4,7 +4,7 @@ import { useAuthStore } from './auth'
 
 export interface Activity {
   id: string
-  type: 'lead' | 'customer' | 'auction' | 'project' | 'system'
+  type: 'lead' | 'customer' | 'auction' | 'project' | 'system' | 'sales_order'
   sub_type: string
   content: string
   timestamp: string
@@ -28,10 +28,13 @@ export interface SalesOrder {
   customerId: string
   projectId?: string
   orderDate: string
-  status: 'draft' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'
+  status: 'draft' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'completed'
   totalAmount: number
   notes: string
   items: SalesOrderItem[]
+  approverId?: string
+  approvalStatus?: 'pending' | 'approved' | 'rejected'
+  approvedAt?: string
   createdAt: string
 }
 
@@ -129,6 +132,31 @@ export interface Document {
   createdAt: string
 }
 
+export interface Employee {
+  id: string
+  name: string
+  email: string
+  phone: string
+  position: string
+  department: string
+  departmentId?: string
+  status: 'active' | 'inactive' | 'on_leave'
+  joinedAt: string
+  managerId?: string
+  userId?: string
+  createdAt: string
+}
+
+export interface Department {
+  id: string
+  name: string
+  parentId?: string
+  managerId?: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export const useAppStore = defineStore('app', () => {
   const authStore = useAuthStore()
   const leads = ref<Lead[]>([])
@@ -137,6 +165,9 @@ export const useAppStore = defineStore('app', () => {
   const projects = ref<Project[]>([])
   const salesOrders = ref<SalesOrder[]>([])
   const activities = ref<Activity[]>([])
+  const employees = ref<Employee[]>([])
+  const departments = ref<Department[]>([])
+  const users = ref<any[]>([])
 
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -152,13 +183,16 @@ export const useAppStore = defineStore('app', () => {
     error.value = null
     try {
       const headers = { 'Authorization': `Bearer ${authStore.token}` }
-      const [leadsRes, customersRes, auctionsRes, projectsRes, salesOrdersRes, activitiesRes] = await Promise.all([
+      const [leadsRes, customersRes, auctionsRes, projectsRes, salesOrdersRes, activitiesRes, employeesRes, usersRes, departmentsRes] = await Promise.all([
         fetch('/api/leads', { headers }),
         fetch('/api/customers', { headers }),
         fetch('/api/auctions', { headers }),
         fetch('/api/projects', { headers }),
         fetch('/api/sales-orders', { headers }),
-        fetch('/api/activities', { headers })
+        fetch('/api/activities', { headers }),
+        fetch('/api/employees', { headers }),
+        fetch('/api/users', { headers }),
+        fetch('/api/departments', { headers })
       ])
 
       if (leadsRes.status === 401 || leadsRes.status === 403) {
@@ -172,6 +206,9 @@ export const useAppStore = defineStore('app', () => {
       projects.value = await projectsRes.json()
       salesOrders.value = await salesOrdersRes.json()
       activities.value = await activitiesRes.json()
+      employees.value = await employeesRes.json()
+      users.value = await usersRes.json()
+      departments.value = await departmentsRes.json()
     } catch (err) {
       error.value = 'Failed to fetch data'
       console.error(err)
@@ -269,6 +306,29 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  const approveSalesOrder = async (id: string, action: 'approve' | 'reject') => {
+    try {
+      const res = await fetch(`/api/sales-orders/${id}/approve`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ action })
+      })
+      if (!res.ok) throw new Error('Failed to approve sales order')
+      const updatedOrder = await res.json()
+      const index = salesOrders.value.findIndex(o => o.id === id)
+      if (index !== -1) {
+        salesOrders.value[index] = updatedOrder
+      }
+      // Refresh activities
+      const activitiesRes = await fetch('/api/activities', { headers: { 'Authorization': `Bearer ${authStore.token}` } })
+      activities.value = await activitiesRes.json()
+      return updatedOrder
+    } catch (err) {
+      console.error(err)
+      throw err
+    }
+  }
+
   return {
     leads,
     customers,
@@ -284,6 +344,7 @@ export const useAppStore = defineStore('app', () => {
     scheduleAuction,
     startAuction,
     completeAuction,
+    approveSalesOrder,
     // Sales Orders CRUD
     createSalesOrder: async (so: Partial<SalesOrder>) => {
       const res = await fetch('/api/sales-orders', {
@@ -291,8 +352,31 @@ export const useAppStore = defineStore('app', () => {
         headers: getHeaders(),
         body: JSON.stringify(so)
       })
-      if (!res.ok) throw new Error('Failed to create sales order')
-      await fetchData()
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.details || 'Failed to create sales order')
+      }
+      const newOrder = await res.json()
+      // Add to store immediately to avoid "not found" on redirect
+      salesOrders.value.push(newOrder)
+      return newOrder
+    },
+    fetchSalesOrder: async (id: string) => {
+      try {
+        const res = await fetch(`/api/sales-orders/${id}`, { headers: getHeaders() })
+        if (!res.ok) return null
+        const order = await res.json()
+        const index = salesOrders.value.findIndex(o => o.id === id)
+        if (index !== -1) {
+          salesOrders.value[index] = order
+        } else {
+          salesOrders.value.push(order)
+        }
+        return order
+      } catch (err) {
+        console.error('Failed to fetch sales order:', err)
+        return null
+      }
     },
     updateSalesOrder: async (id: string, so: Partial<SalesOrder>) => {
       const res = await fetch(`/api/sales-orders/${id}`, {
@@ -564,6 +648,76 @@ export const useAppStore = defineStore('app', () => {
         headers: getHeaders()
       })
       if (!res.ok) throw new Error('Failed to delete document')
+    },
+    // Employees CRUD
+    employees,
+    users,
+    fetchUsers: async () => {
+      try {
+        const res = await fetch('/api/users', { headers: getHeaders() })
+        if (res.ok) {
+          users.value = await res.json()
+        }
+      } catch (err) {
+        console.error('Failed to fetch users:', err)
+      }
+    },
+    createEmployee: async (employee: Partial<Employee>) => {
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(employee)
+      })
+      if (!res.ok) throw new Error('Failed to create employee')
+      await fetchData()
+    },
+    updateEmployee: async (id: string, employee: Partial<Employee>) => {
+      const res = await fetch(`/api/employees/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(employee)
+      })
+      if (!res.ok) throw new Error('Failed to update employee')
+      await fetchData()
+    },
+    deleteEmployee: async (id: string) => {
+      const res = await fetch(`/api/employees/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+      if (!res.ok) throw new Error('Failed to delete employee')
+      await fetchData()
+    },
+    // Departments CRUD
+    departments,
+    createDepartment: async (dept: Partial<Department>) => {
+      const res = await fetch('/api/departments', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(dept)
+      })
+      if (!res.ok) throw new Error('Failed to create department')
+      await fetchData()
+    },
+    updateDepartment: async (id: string, dept: Partial<Department>) => {
+      const res = await fetch(`/api/departments/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(dept)
+      })
+      if (!res.ok) throw new Error('Failed to update department')
+      await fetchData()
+    },
+    deleteDepartment: async (id: string) => {
+      const res = await fetch(`/api/departments/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete department')
+      }
+      await fetchData()
     }
   }
 })

@@ -26,7 +26,7 @@
       <section class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="p-6 border-b border-slate-100 flex items-center justify-between">
           <h2 class="text-lg font-bold text-slate-900">Recent Leads</h2>
-          <router-link to="/leads" class="text-sm font-medium text-emerald-600 hover:text-emerald-700">View all</router-link>
+          <router-link v-if="authStore.hasPermission('leads')" to="/leads" class="text-sm font-medium text-emerald-600 hover:text-emerald-700">View all</router-link>
         </div>
         <div class="divide-y divide-slate-100">
           <div v-for="lead in store.leads.slice(0, 5)" :key="lead.id" class="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
@@ -53,7 +53,7 @@
       <section class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div class="p-6 border-b border-slate-100 flex items-center justify-between">
           <h2 class="text-lg font-bold text-slate-900">Global Activities</h2>
-          <router-link to="/activities" class="text-sm font-medium text-emerald-600 hover:text-emerald-700">View all</router-link>
+          <router-link v-if="authStore.hasPermission('activities')" to="/activities" class="text-sm font-medium text-emerald-600 hover:text-emerald-700">View all</router-link>
         </div>
         <div class="p-6">
           <div class="space-y-6">
@@ -77,18 +77,20 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { Users, UserSquare2, Gavel, Briefcase } from 'lucide-vue-next'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 
 onMounted(() => {
   store.fetchData()
 })
 
 const stats = computed(() => [
-  { label: 'Total Leads', value: store.leads.length, icon: Users, colorClass: 'bg-blue-100 text-blue-600', trend: '+12%' },
-  { label: 'Customers', value: store.customers.length, icon: UserSquare2, colorClass: 'bg-emerald-100 text-emerald-600', trend: '+5%' },
-  { label: 'Active Auctions', value: store.auctions.filter(a => a.status === 'active').length, icon: Gavel, colorClass: 'bg-amber-100 text-amber-600' },
-  { label: 'Active Projects', value: store.projects.filter(p => p.status === 'ongoing').length, icon: Briefcase, colorClass: 'bg-purple-100 text-purple-600' },
-])
+  { label: 'Total Leads', value: store.leads.length, icon: Users, colorClass: 'bg-blue-100 text-blue-600', trend: '+12%', permission: 'leads' },
+  { label: 'Customers', value: store.customers.length, icon: UserSquare2, colorClass: 'bg-emerald-100 text-emerald-600', trend: '+5%', permission: 'customers' },
+  { label: 'Active Auctions', value: store.auctions.filter(a => a.status === 'active').length, icon: Gavel, colorClass: 'bg-amber-100 text-amber-600', permission: 'auctions' },
+  { label: 'Active Projects', value: store.projects.filter(p => p.status === 'ongoing').length, icon: Briefcase, colorClass: 'bg-purple-100 text-purple-600', permission: 'projects' },
+].filter(stat => authStore.hasPermission(stat.permission)))
 </script>

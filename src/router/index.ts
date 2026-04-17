@@ -17,6 +17,10 @@ import SalesOrdersList from '@/pages/sales-orders/SalesOrdersList.vue'
 import SalesOrderDetail from '@/pages/sales-orders/SalesOrderDetail.vue'
 import Activities from '@/pages/Activities.vue'
 import Users from '@/pages/Users.vue'
+import Employees from '@/pages/Employees.vue'
+import Departments from '@/pages/Departments.vue'
+import MenuPermissions from '@/pages/MenuPermissions.vue'
+import CCTVMonitoring from '@/pages/CCTVMonitoring.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -35,68 +39,104 @@ const router = createRouter({
         {
           path: '',
           name: 'dashboard',
-          component: Dashboard
+          component: Dashboard,
+          meta: { menuKey: 'dashboard' }
         },
         {
           path: 'leads',
           name: 'leads-list',
-          component: LeadsList
+          component: LeadsList,
+          meta: { menuKey: 'leads' }
         },
         {
           path: 'leads/:id',
           name: 'lead-detail',
-          component: LeadDetail
+          component: LeadDetail,
+          meta: { menuKey: 'leads' }
         },
         {
           path: 'customers',
           name: 'customers-list',
-          component: CustomersList
+          component: CustomersList,
+          meta: { menuKey: 'customers' }
         },
         {
           path: 'customers/:id',
           name: 'customer-detail',
-          component: CustomerDetail
+          component: CustomerDetail,
+          meta: { menuKey: 'customers' }
         },
         {
           path: 'auctions',
           name: 'auctions-list',
-          component: AuctionsList
+          component: AuctionsList,
+          meta: { menuKey: 'auctions' }
         },
         {
           path: 'auctions/:id',
           name: 'auction-detail',
-          component: AuctionDetail
+          component: AuctionDetail,
+          meta: { menuKey: 'auctions' }
         },
         {
           path: 'projects',
           name: 'projects-list',
-          component: ProjectsList
+          component: ProjectsList,
+          meta: { menuKey: 'projects' }
         },
         {
           path: 'projects/:id',
           name: 'project-detail',
-          component: ProjectDetail
+          component: ProjectDetail,
+          meta: { menuKey: 'projects' }
         },
         {
           path: 'sales-orders',
           name: 'sales-orders-list',
-          component: SalesOrdersList
+          component: SalesOrdersList,
+          meta: { menuKey: 'sales-orders' }
         },
         {
           path: 'sales-orders/:id',
           name: 'sales-order-detail',
-          component: SalesOrderDetail
+          component: SalesOrderDetail,
+          meta: { menuKey: 'sales-orders' }
         },
         {
           path: 'activities',
           name: 'activities',
-          component: Activities
+          component: Activities,
+          meta: { menuKey: 'activities' }
         },
         {
           path: 'users',
           name: 'users-list',
           component: Users,
-          meta: { requiresAdmin: true }
+          meta: { requiresAdmin: true, menuKey: 'users' }
+        },
+        {
+          path: 'employees',
+          name: 'employees-list',
+          component: Employees,
+          meta: { requiresAdmin: true, menuKey: 'employees' }
+        },
+        {
+          path: 'departments',
+          name: 'departments-list',
+          component: Departments,
+          meta: { requiresAdmin: true, menuKey: 'departments' }
+        },
+        {
+          path: 'menu-permissions',
+          name: 'menu-permissions',
+          component: MenuPermissions,
+          meta: { requiresAdmin: true, menuKey: 'menu-permissions' }
+        },
+        {
+          path: 'cctv-monitoring',
+          name: 'cctv-monitoring',
+          component: CCTVMonitoring,
+          meta: { menuKey: 'cctv-monitoring' }
         }
       ]
     }
@@ -116,6 +156,8 @@ router.beforeEach(async (to, from, next) => {
   } else if (to.meta.guest && authStore.isAuthenticated) {
     next({ name: 'dashboard' })
   } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    next({ name: 'dashboard' })
+  } else if (to.meta.menuKey && !authStore.hasPermission(to.meta.menuKey as string)) {
     next({ name: 'dashboard' })
   } else {
     next()

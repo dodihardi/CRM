@@ -75,12 +75,21 @@
               ${{ order.totalAmount.toLocaleString() }}
             </td>
             <td class="px-6 py-4">
-              <span 
-                class="px-2 py-1 text-[10px] font-bold uppercase rounded-full"
-                :class="getStatusClass(order.status)"
-              >
-                {{ order.status }}
-              </span>
+              <div class="flex flex-col space-y-1">
+                <span 
+                  class="px-2 py-1 text-[10px] font-bold uppercase rounded-full w-fit"
+                  :class="getStatusClass(order.status)"
+                >
+                  {{ order.status }}
+                </span>
+                <span 
+                  v-if="order.approvalStatus"
+                  class="px-2 py-1 text-[10px] font-bold uppercase rounded-full w-fit"
+                  :class="getApprovalStatusClass(order.approvalStatus)"
+                >
+                  {{ order.approvalStatus }}
+                </span>
+              </div>
             </td>
             <td class="px-6 py-4 text-right">
               <router-link 
@@ -113,39 +122,61 @@
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1">
               <label class="text-xs font-bold text-slate-500 uppercase">Customer</label>
-              <select 
+              <Combogrid
                 v-model="newOrder.customerId"
-                required
-                class="w-full px-4 py-2 bg-slate-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">Select Customer</option>
-                <option v-for="customer in appStore.customers" :key="customer.id" :value="customer.id">
-                  {{ customer.name }}
-                </option>
-              </select>
+                :options="appStore.customers"
+                :columns="[
+                  { label: 'ID', key: 'id' },
+                  { label: 'Name', key: 'name' },
+                  { label: 'Company', key: 'company' }
+                ]"
+                placeholder="Search Customer..."
+                displayKey="name"
+                :searchKeys="['id', 'name', 'company', 'email']"
+              />
             </div>
             <div class="space-y-1">
               <label class="text-xs font-bold text-slate-500 uppercase">Project (Optional)</label>
-              <select 
+              <Combogrid
                 v-model="newOrder.projectId"
-                class="w-full px-4 py-2 bg-slate-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">None</option>
-                <option v-for="project in appStore.projects" :key="project.id" :value="project.id">
-                  {{ project.title }}
-                </option>
-              </select>
+                :options="appStore.projects"
+                :columns="[
+                  { label: 'ID', key: 'id' },
+                  { label: 'Title', key: 'title' },
+                  { label: 'Status', key: 'status' }
+                ]"
+                placeholder="Search Project..."
+                displayKey="title"
+                :searchKeys="['id', 'title', 'status']"
+              />
             </div>
           </div>
 
-          <div class="space-y-1">
-            <label class="text-xs font-bold text-slate-500 uppercase">Order Date</label>
-            <input 
-              v-model="newOrder.orderDate"
-              type="date"
-              required
-              class="w-full px-4 py-2 bg-slate-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
-            />
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-slate-500 uppercase">Order Date</label>
+              <input 
+                v-model="newOrder.orderDate"
+                type="date"
+                required
+                class="w-full px-4 py-2 bg-slate-50 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-slate-500 uppercase">Approver</label>
+              <Combogrid
+                v-model="newOrder.approverId"
+                :options="appStore.users"
+                :columns="[
+                  { label: 'ID', key: 'id' },
+                  { label: 'Name', key: 'name' },
+                  { label: 'Role', key: 'role' }
+                ]"
+                placeholder="Select Approver..."
+                displayKey="name"
+                :searchKeys="['id', 'name', 'role']"
+              />
+            </div>
           </div>
 
           <div class="space-y-1">
@@ -183,10 +214,13 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { Plus, Search, ChevronRight, X, Loader2 } from 'lucide-vue-next'
+import Combogrid from '@/components/Combogrid.vue'
 
 const appStore = useAppStore()
+const router = useRouter()
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const showCreateModal = ref(false)
@@ -195,6 +229,7 @@ const isSubmitting = ref(false)
 const newOrder = ref({
   customerId: '',
   projectId: '',
+  approverId: '',
   orderDate: new Date().toISOString().split('T')[0],
   notes: '',
   status: 'draft' as const,
@@ -222,7 +257,17 @@ const getStatusClass = (status: string) => {
     case 'confirmed': return 'bg-blue-100 text-blue-600'
     case 'shipped': return 'bg-amber-100 text-amber-600'
     case 'delivered': return 'bg-emerald-100 text-emerald-600'
+    case 'completed': return 'bg-emerald-600 text-white'
     case 'cancelled': return 'bg-red-100 text-red-600'
+    default: return 'bg-slate-100 text-slate-600'
+  }
+}
+
+const getApprovalStatusClass = (status: string) => {
+  switch (status) {
+    case 'pending': return 'bg-amber-100 text-amber-600'
+    case 'approved': return 'bg-emerald-100 text-emerald-600'
+    case 'rejected': return 'bg-red-100 text-red-600'
     default: return 'bg-slate-100 text-slate-600'
   }
 }
@@ -230,17 +275,22 @@ const getStatusClass = (status: string) => {
 const handleCreate = async () => {
   isSubmitting.value = true
   try {
-    await appStore.createSalesOrder(newOrder.value)
+    const createdOrder = await appStore.createSalesOrder(newOrder.value)
     showCreateModal.value = false
     // Reset form
     newOrder.value = {
       customerId: '',
       projectId: '',
+      approverId: '',
       orderDate: new Date().toISOString().split('T')[0],
       notes: '',
       status: 'draft',
       totalAmount: 0,
       items: []
+    }
+    // Redirect to detail page
+    if (createdOrder && createdOrder.id) {
+      router.push(`/sales-orders/${createdOrder.id}`)
     }
   } catch (err) {
     console.error(err)

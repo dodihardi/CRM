@@ -5,13 +5,28 @@
         <h1 class="text-2xl font-bold text-slate-900">User Management</h1>
         <p class="text-slate-500">Manage system users and their roles</p>
       </div>
-      <button 
-        @click="openAddModal"
-        class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center"
-      >
-        <UserPlus class="w-4 h-4 mr-2" />
-        Add User
-      </button>
+      <div class="flex items-center space-x-3">
+        <div class="hidden md:flex items-center space-x-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+          <Shield class="w-3 h-3 text-blue-500" />
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Roles:</span>
+          <div class="flex space-x-1">
+            <span 
+              v-for="role in roles" 
+              :key="role.id"
+              class="px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-medium capitalize"
+            >
+              {{ role.name }}
+            </span>
+          </div>
+        </div>
+        <button 
+          @click="openAddModal"
+          class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center"
+        >
+          <UserPlus class="w-4 h-4 mr-2" />
+          Add User
+        </button>
+      </div>
     </div>
 
     <!-- Users Table -->
@@ -114,15 +129,15 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Role</label>
-            <select 
-              v-model="form.role" 
-              required
-              class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all appearance-none bg-white"
-            >
-              <option value="admin">Admin</option>
-              <option value="staff">Staff</option>
-              <option value="viewer">Viewer</option>
-            </select>
+            <Combogrid 
+              v-model="form.role"
+              :options="roles"
+              :columns="[{ label: 'Role Name', key: 'name' }]"
+              displayKey="name"
+              valueKey="name"
+              :searchKeys="['name']"
+              placeholder="Select role..."
+            />
           </div>
 
           <div v-if="error" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg border border-red-100">
@@ -182,10 +197,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { UserPlus, Pencil, Trash2, X, AlertTriangle } from 'lucide-vue-next'
+import { UserPlus, Pencil, Trash2, X, AlertTriangle, Shield } from 'lucide-vue-next'
+import Combogrid from '@/components/Combogrid.vue'
 
 const authStore = useAuthStore()
 const users = ref<any[]>([])
+const roles = ref<{ id: number, name: string }[]>([])
 const showModal = ref(false)
 const isEditing = ref(false)
 const isSubmitting = ref(false)
@@ -200,6 +217,19 @@ const form = ref({
   name: ''
 })
 
+const fetchRoles = async () => {
+  try {
+    const res = await fetch('/api/roles', {
+      headers: { 'Authorization': `Bearer ${authStore.token}` }
+    })
+    if (res.ok) {
+      roles.value = await res.json()
+    }
+  } catch (err) {
+    console.error('Failed to fetch roles:', err)
+  }
+}
+
 const fetchUsers = async () => {
   try {
     const res = await fetch('/api/users', {
@@ -213,7 +243,10 @@ const fetchUsers = async () => {
   }
 }
 
-onMounted(fetchUsers)
+onMounted(() => {
+  fetchUsers()
+  fetchRoles()
+})
 
 const roleBadgeClass = (role: string) => {
   switch (role) {

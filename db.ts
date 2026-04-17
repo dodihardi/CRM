@@ -17,6 +17,14 @@ export const initDb = async () => {
   try {
     await client.query('BEGIN');
 
+    // Roles Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL
+      )
+    `);
+
     // Users Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -158,8 +166,13 @@ export const initDb = async () => {
         customer_id TEXT,
         auction_id TEXT,
         project_id TEXT,
-        sales_order_id TEXT
+        sales_order_id TEXT REFERENCES sales_orders(id)
       )
+    `);
+
+    // Add sales_order_id to activities if it doesn't exist
+    await client.query(`
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS sales_order_id TEXT REFERENCES sales_orders(id);
     `);
 
     // Sales Orders Table
@@ -172,8 +185,18 @@ export const initDb = async () => {
         status TEXT DEFAULT 'draft',
         total_amount NUMERIC DEFAULT 0,
         notes TEXT,
+        approver_id TEXT REFERENCES users(id),
+        approval_status TEXT DEFAULT 'pending',
+        approved_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add columns if they don't exist (for existing databases)
+    await client.query(`
+      ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS approver_id TEXT REFERENCES users(id);
+      ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'pending';
+      ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;
     `);
 
     // Sales Order Items Table
@@ -202,8 +225,75 @@ export const initDb = async () => {
       )
     `);
 
+    // Departments Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS departments (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        parent_id TEXT REFERENCES departments(id),
+        manager_id TEXT, -- Will be linked to employees(id) later or kept as TEXT for flexibility
+        description TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Employees Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employees (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        phone TEXT,
+        position TEXT,
+        department TEXT,
+        department_id TEXT REFERENCES departments(id),
+        status TEXT DEFAULT 'active', -- 'active', 'inactive', 'on_leave'
+        joined_at DATE DEFAULT CURRENT_DATE,
+        manager_id TEXT REFERENCES employees(id),
+        user_id TEXT REFERENCES users(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Menu Permissions Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS menu_permissions (
+        role TEXT NOT NULL,
+        menu_key TEXT NOT NULL,
+        PRIMARY KEY (role, menu_key)
+      )
+    `);
+
+    // Available Menus Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS available_menus (
+        id SERIAL PRIMARY KEY,
+        menu_key TEXT UNIQUE NOT NULL,
+        label TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ensure columns exist if table was created before
+    try {
+      await client.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS manager_id TEXT REFERENCES employees(id)');
+      await client.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id)');
+      await client.query('ALTER TABLE employees ADD COLUMN IF NOT EXISTS department_id TEXT REFERENCES departments(id)');
+      await client.query('ALTER TABLE departments ADD COLUMN IF NOT EXISTS manager_id TEXT');
+    } catch (e) {
+      console.log('Columns might already exist or table is being created');
+    }
+
     await client.query('COMMIT');
     console.log('Database initialized successfully');
+
+    // Seed initial roles if table is empty
+    const rolesCount = await client.query('SELECT COUNT(*) FROM roles');
+    if (parseInt(rolesCount.rows[0].count) === 0) {
+      console.log('Seeding initial roles...');
+      await client.query("INSERT INTO roles (name) VALUES ('admin'), ('staff'), ('viewer')");
+    }
 
     // Seed initial users if table is empty
     const usersCount = await client.query('SELECT COUNT(*) FROM users');
@@ -225,6 +315,90 @@ export const initDb = async () => {
         'INSERT INTO users (id, username, password, role, name) VALUES ($1, $2, $3, $4, $5)',
         ['U3', 'viewer', viewerPass, 'viewer', 'Guest Viewer']
       );
+    }
+
+    // Seed available menus if table is empty
+    const availableMenusCount = await client.query('SELECT COUNT(*) FROM available_menus');
+    if (parseInt(availableMenusCount.rows[0].count) === 0) {
+      console.log('Seeding initial available menus...');
+      const menus = [
+        { key: 'dashboard', label: 'Dashboard' },
+        { key: 'leads', label: 'Leads' },
+        { key: 'customers', label: 'Customers' },
+        { key: 'employees', label: 'Employees' },
+        { key: 'users', label: 'Users' },
+        { key: 'auctions', label: 'Auctions' },
+        { key: 'projects', label: 'Projects' },
+        { key: 'sales-orders', label: 'Sales Orders' },
+        { key: 'activities', label: 'Activities' },
+        { key: 'departments', label: 'Departments' },
+        { key: 'cctv-monitoring', label: 'CCTV Monitoring' },
+        { key: 'menu-permissions', label: 'Menu Permissions' },
+        { key: 'local-deployment', label: 'Local Deployment' },
+      ];
+
+      for (const menu of menus) {
+        await client.query('INSERT INTO available_menus (menu_key, label) VALUES ($1, $2)', [menu.key, menu.label]);
+      }
+    }
+
+    // Seed menu permissions if table is empty
+    const menuPermissionsCount = await client.query('SELECT COUNT(*) FROM menu_permissions');
+    if (parseInt(menuPermissionsCount.rows[0].count) === 0) {
+      console.log('Seeding initial menu permissions...');
+      const menus = [
+        'dashboard', 'leads', 'customers', 'employees', 'users', 'departments',
+        'auctions', 'projects', 'sales-orders', 'activities', 'cctv-monitoring', 'menu-permissions',
+        'local-deployment'
+      ];
+      
+      // Admin gets all
+      for (const menu of menus) {
+        await client.query('INSERT INTO menu_permissions (role, menu_key) VALUES ($1, $2)', ['admin', menu]);
+      }
+      
+      // Staff gets some
+      const staffMenus = ['dashboard', 'leads', 'customers', 'auctions', 'projects', 'sales-orders', 'activities'];
+      for (const menu of staffMenus) {
+        await client.query('INSERT INTO menu_permissions (role, menu_key) VALUES ($1, $2)', ['staff', menu]);
+      }
+      
+      // Viewer gets very few
+      const viewerMenus = ['dashboard', 'leads', 'customers', 'auctions'];
+      for (const menu of viewerMenus) {
+        await client.query('INSERT INTO menu_permissions (role, menu_key) VALUES ($1, $2)', ['viewer', menu]);
+      }
+    } else {
+      // Ensure 'departments' permission exists for admin if not already there
+      const deptPerm = await client.query("SELECT * FROM menu_permissions WHERE role = 'admin' AND menu_key = 'departments'");
+      if (deptPerm.rows.length === 0) {
+        await client.query("INSERT INTO menu_permissions (role, menu_key) VALUES ('admin', 'departments')");
+      }
+    }
+
+    // Seed initial departments if table is empty
+    const departmentsCount = await client.query('SELECT COUNT(*) FROM departments');
+    if (parseInt(departmentsCount.rows[0].count) === 0) {
+      console.log('Seeding initial departments...');
+      await client.query("INSERT INTO departments (id, name, description) VALUES ('D1', 'Engineering', 'Software and hardware engineering'), ('D2', 'Marketing', 'Product marketing and sales'), ('D3', 'Operations', 'Daily operations and logistics')");
+    }
+
+    // Seed initial employees if table is empty
+    const employeesCount = await client.query('SELECT COUNT(*) FROM employees');
+    if (parseInt(employeesCount.rows[0].count) === 0) {
+      console.log('Seeding initial employees...');
+      const initialEmployees = [
+        ['E1', 'John Doe', 'john.doe@example.com', '+1 (555) 000-1111', 'Sales Manager', 'Marketing', 'D2', 'active', '2023-01-15'],
+        ['E2', 'Jane Smith', 'jane.smith@example.com', '+1 (555) 000-2222', 'Auctioneer', 'Operations', 'D3', 'active', '2023-03-20'],
+        ['E3', 'Michael Brown', 'michael.b@example.com', '+1 (555) 000-3333', 'Project Coordinator', 'Engineering', 'D1', 'active', '2023-06-10']
+      ];
+
+      for (const emp of initialEmployees) {
+        await client.query(
+          'INSERT INTO employees (id, name, email, phone, position, department, department_id, status, joined_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          emp
+        );
+      }
     }
 
     // Seed initial data if tables are empty

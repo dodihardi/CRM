@@ -85,10 +85,18 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1">Customer</label>
-              <select v-model="form.customer_id" required class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white">
-                <option value="" disabled>Select Customer</option>
-                <option v-for="c in store.customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
+              <Combogrid
+                v-model="form.customer_id"
+                :options="store.customers"
+                :columns="[
+                  { label: 'ID', key: 'id' },
+                  { label: 'Name', key: 'name' },
+                  { label: 'Company', key: 'company' }
+                ]"
+                placeholder="Search Customer..."
+                displayKey="name"
+                :searchKeys="['id', 'name', 'company', 'email']"
+              />
             </div>
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
@@ -145,6 +153,7 @@
 import { ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ChevronRight, Plus, Pencil, Trash2, X, AlertTriangle } from 'lucide-vue-next'
+import Combogrid from '@/components/Combogrid.vue'
 
 const store = useAppStore()
 const showModal = ref(false)

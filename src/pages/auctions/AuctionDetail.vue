@@ -355,14 +355,18 @@
           <div class="space-y-4">
             <div>
               <label class="block text-sm font-bold text-slate-700 mb-1">Select Lead or Customer</label>
-              <select v-model="participantForm.selectedId" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-                <optgroup label="Leads">
-                  <option v-for="l in store.leads" :key="l.id" :value="`lead:${l.id}`">{{ l.name }} (Lead)</option>
-                </optgroup>
-                <optgroup label="Customers">
-                  <option v-for="c in store.customers" :key="c.id" :value="`customer:${c.id}`">{{ c.name }} (Customer)</option>
-                </optgroup>
-              </select>
+              <Combogrid
+                v-model="participantForm.selectedId"
+                :options="combinedParticipants"
+                :columns="[
+                  { label: 'Type', key: 'type' },
+                  { label: 'Name', key: 'name' },
+                  { label: 'Company', key: 'company' }
+                ]"
+                placeholder="Search Lead or Customer..."
+                displayKey="name"
+                :searchKeys="['name', 'company', 'email', 'type']"
+              />
             </div>
           </div>
         </div>
@@ -474,10 +478,17 @@
           <div class="space-y-6">
             <div>
               <label class="block text-sm font-bold text-slate-700 mb-2">Select Winner</label>
-              <select v-model="resultForm.winnerId" class="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none">
-                <option value="">Choose participant...</option>
-                <option v-for="p in auction.participants" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
+              <Combogrid
+                v-model="resultForm.winnerId"
+                :options="auction?.participants || []"
+                :columns="[
+                  { key: 'name', label: 'Name' },
+                  { key: 'type', label: 'Type' }
+                ]"
+                displayKey="name"
+                :searchKeys="['name']"
+                placeholder="Choose participant..."
+              />
             </div>
             <div>
               <label class="block text-sm font-bold text-slate-700 mb-2">Final Price ($)</label>
@@ -536,6 +547,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import DocumentSection from '@/components/DocumentSection.vue'
 import { ArrowLeft, Package, Trophy, ChevronRight, Calendar, Plus, Pencil, Trash2, FileText, X } from 'lucide-vue-next'
+import Combogrid from '@/components/Combogrid.vue'
 
 const route = useRoute()
 const store = useAppStore()
@@ -547,6 +559,13 @@ const relatedProject = computed(() => store.projects.find(p => p.auction_id === 
 const relatedCustomer = computed(() => {
   if (!relatedProject.value) return null
   return store.customers.find(c => c.id === relatedProject.value?.customer_id)
+})
+
+const combinedParticipants = computed(() => {
+  return [
+    ...store.leads.map(l => ({ ...l, id: `lead:${l.id}`, type: 'lead' })),
+    ...store.customers.map(c => ({ ...c, id: `customer:${c.id}`, type: 'customer' }))
+  ]
 })
 
 // Edit Auction

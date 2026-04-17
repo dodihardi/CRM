@@ -120,13 +120,17 @@ async function startServer() {
         { expiresIn: '24h' }
       );
 
+      const permissionsResult = await db.query('SELECT menu_key FROM menu_permissions WHERE role = $1', [user.role]);
+      const permissions = permissionsResult.rows.map(r => r.menu_key);
+
       res.json({
         token,
         user: {
           id: user.id,
           username: user.username,
           role: user.role,
-          name: user.name
+          name: user.name,
+          permissions
         }
       });
     } catch (err) {
@@ -134,8 +138,173 @@ async function startServer() {
     }
   });
 
-  app.get('/api/auth/me', authenticateToken, (req: any, res) => {
-    res.json(req.user);
+  app.get('/api/auth/me', authenticateToken, async (req: any, res) => {
+    try {
+      const permissionsResult = await db.query('SELECT menu_key FROM menu_permissions WHERE role = $1', [req.user.role]);
+      const permissions = permissionsResult.rows.map(r => r.menu_key);
+      res.json({ ...req.user, permissions });
+    } catch (err) {
+      res.json(req.user);
+    }
+  });
+
+  app.get('/api/menu-permissions', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT * FROM menu_permissions');
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch menu permissions' });
+    }
+  });
+
+  app.post('/api/menu-permissions', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { role, menuKeys } = req.body;
+    try {
+      await db.query('BEGIN');
+      await db.query('DELETE FROM menu_permissions WHERE role = $1', [role]);
+      for (const menuKey of menuKeys) {
+        await db.query('INSERT INTO menu_permissions (role, menu_key) VALUES ($1, $2)', [role, menuKey]);
+      }
+      await db.query('COMMIT');
+      res.json({ message: 'Permissions updated successfully' });
+    } catch (err) {
+      await db.query('ROLLBACK');
+      res.status(500).json({ error: 'Failed to update menu permissions' });
+    }
+  });
+
+  app.get('/api/roles', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT id, name FROM roles ORDER BY name ASC');
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch roles' });
+    }
+  });
+
+  app.post('/api/roles', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Role name is required' });
+    
+    try {
+      await db.query('INSERT INTO roles (name) VALUES ($1)', [name.toLowerCase()]);
+      res.json({ message: 'Role added successfully' });
+    } catch (err: any) {
+      if (err.code === '23505') {
+        return res.status(400).json({ error: 'Role name already exists' });
+      }
+      res.status(500).json({ error: 'Failed to add role' });
+    }
+  });
+
+  app.put('/api/roles/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Role name is required' });
+
+    try {
+      await db.query('BEGIN');
+      
+      const oldRoleResult = await db.query('SELECT name FROM roles WHERE id = $1', [id]);
+      if (oldRoleResult.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(404).json({ error: 'Role not found' });
+      }
+      const oldName = oldRoleResult.rows[0].name;
+      const newName = name.toLowerCase();
+
+      if (oldName === 'admin') {
+        await db.query('ROLLBACK');
+        return res.status(400).json({ error: 'Cannot rename admin role' });
+      }
+
+      await db.query('UPDATE roles SET name = $1 WHERE id = $2', [newName, id]);
+      await db.query('UPDATE users SET role = $1 WHERE role = $2', [newName, oldName]);
+      await db.query('UPDATE menu_permissions SET role = $1 WHERE role = $2', [newName, oldName]);
+
+      await db.query('COMMIT');
+      res.json({ message: 'Role updated successfully' });
+    } catch (err: any) {
+      await db.query('ROLLBACK');
+      if (err.code === '23505') {
+        return res.status(400).json({ error: 'Role name already exists' });
+      }
+      res.status(500).json({ error: 'Failed to update role' });
+    }
+  });
+
+  app.delete('/api/roles/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.query('BEGIN');
+      
+      const roleResult = await db.query('SELECT name FROM roles WHERE id = $1', [id]);
+      if (roleResult.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(404).json({ error: 'Role not found' });
+      }
+      const roleName = roleResult.rows[0].name;
+
+      if (roleName === 'admin') {
+        await db.query('ROLLBACK');
+        return res.status(400).json({ error: 'Cannot delete admin role' });
+      }
+
+      const usersResult = await db.query('SELECT COUNT(*) FROM users WHERE role = $1', [roleName]);
+      if (parseInt(usersResult.rows[0].count) > 0) {
+        await db.query('ROLLBACK');
+        return res.status(400).json({ error: 'Cannot delete role that is assigned to users' });
+      }
+
+      await db.query('DELETE FROM menu_permissions WHERE role = $1', [roleName]);
+      await db.query('DELETE FROM roles WHERE id = $1', [id]);
+
+      await db.query('COMMIT');
+      res.json({ message: 'Role deleted successfully' });
+    } catch (err) {
+      await db.query('ROLLBACK');
+      res.status(500).json({ error: 'Failed to delete role' });
+    }
+  });
+
+  app.get('/api/available-menus', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT * FROM available_menus ORDER BY label ASC');
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch available menus' });
+    }
+  });
+
+  app.post('/api/available-menus', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { menu_key, label } = req.body;
+    try {
+      const result = await db.query(
+        'INSERT INTO available_menus (menu_key, label) VALUES ($1, $2) RETURNING *',
+        [menu_key, label]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to add available menu' });
+    }
+  });
+
+  app.delete('/api/available-menus/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.query('BEGIN');
+      const menuResult = await db.query('SELECT menu_key FROM available_menus WHERE id = $1', [id]);
+      if (menuResult.rows.length > 0) {
+        const menuKey = menuResult.rows[0].menu_key;
+        await db.query('DELETE FROM menu_permissions WHERE menu_key = $1', [menuKey]);
+        await db.query('DELETE FROM available_menus WHERE id = $1', [id]);
+      }
+      await db.query('COMMIT');
+      res.json({ message: 'Menu deleted successfully' });
+    } catch (err) {
+      await db.query('ROLLBACK');
+      res.status(500).json({ error: 'Failed to delete available menu' });
+    }
   });
 
   // Helper to map DB rows to frontend format (snake_case to camelCase where needed)
@@ -165,6 +334,13 @@ async function startServer() {
     createdAt: row.created_at
   });
 
+  const toNull = (val: any) => {
+    if (val === undefined || val === null || val === '' || val === 'null' || val === 'undefined') {
+      return null;
+    }
+    return val;
+  };
+
   const mapActivity = (row: any) => ({
     id: row.id,
     type: row.type,
@@ -186,6 +362,9 @@ async function startServer() {
     status: row.status,
     totalAmount: Number(row.total_amount),
     notes: row.notes,
+    approverId: row.approver_id,
+    approvalStatus: row.approval_status,
+    approvedAt: row.approved_at,
     createdAt: row.created_at
   });
 
@@ -292,38 +471,102 @@ async function startServer() {
   });
 
   app.get('/api/sales-orders', authenticateToken, async (req, res) => {
+    const { customerId, projectId } = req.query;
     try {
-      const result = await db.query('SELECT * FROM sales_orders ORDER BY created_at DESC');
+      console.log('Fetching sales orders with filters:', { customerId, projectId });
+      let query = 'SELECT * FROM sales_orders';
+      const params = [];
+
+      const cid = toNull(customerId);
+      const pid = toNull(projectId);
+
+      if (cid || pid) {
+        query += ' WHERE ';
+        if (cid) {
+          params.push(cid);
+          query += `customer_id = $${params.length}`;
+        }
+        if (pid) {
+          if (cid) query += ' AND ';
+          params.push(pid);
+          query += `project_id = $${params.length}`;
+        }
+      }
+
+      query += ' ORDER BY created_at DESC';
+      const result = await db.query(query, params);
       const salesOrders = [];
 
       for (const row of result.rows) {
-        const itemsResult = await db.query('SELECT * FROM sales_order_items WHERE sales_order_id = $1', [row.id]);
-        salesOrders.push({
-          ...mapSalesOrder(row),
-          items: itemsResult.rows.map(i => ({
-            id: i.id,
-            description: i.description,
-            quantity: i.quantity,
-            unitPrice: Number(i.unit_price),
-            totalPrice: Number(i.total_price)
-          }))
-        });
+        try {
+          const itemsResult = await db.query('SELECT * FROM sales_order_items WHERE sales_order_id = $1', [row.id]);
+          salesOrders.push({
+            ...mapSalesOrder(row),
+            items: itemsResult.rows.map(i => ({
+              id: i.id,
+              description: i.description,
+              quantity: i.quantity,
+              unitPrice: Number(i.unit_price || 0),
+              totalPrice: Number(i.total_price || 0)
+            }))
+          });
+        } catch (itemErr) {
+          console.error(`Failed to fetch items for sales order ${row.id}:`, itemErr);
+          // Still push the order but without items or with empty items
+          salesOrders.push({ ...mapSalesOrder(row), items: [] });
+        }
       }
       res.json(salesOrders);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to fetch sales orders' });
+      console.error('Failed to fetch sales orders:', err);
+      res.status(500).json({ error: 'Failed to fetch sales orders', details: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get('/api/sales-orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+      const result = await db.query('SELECT * FROM sales_orders WHERE id = $1', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Sales order not found' });
+      }
+      const itemsResult = await db.query('SELECT * FROM sales_order_items WHERE sales_order_id = $1', [id]);
+      res.json({
+        ...mapSalesOrder(result.rows[0]),
+        items: itemsResult.rows.map(i => ({
+          id: i.id,
+          description: i.description,
+          quantity: i.quantity,
+          unitPrice: Number(i.unit_price),
+          totalPrice: Number(i.total_price)
+        }))
+      });
+    } catch (err) {
+      console.error('Failed to fetch sales order:', err);
+      res.status(500).json({ error: 'Failed to fetch sales order', details: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.post('/api/sales-orders', authenticateToken, checkRole(['admin', 'staff']), async (req, res) => {
-    const { customerId, projectId, orderDate, status, totalAmount, notes, items } = req.body;
+    const { customerId, projectId, orderDate, status, totalAmount, notes, items, approverId } = req.body;
     try {
       const id = 'SO' + Date.now();
       await db.query('BEGIN');
       
       const result = await db.query(
-        'INSERT INTO sales_orders (id, customer_id, project_id, order_date, status, total_amount, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-        [id, customerId, projectId, orderDate || new Date().toISOString(), status || 'draft', totalAmount || 0, notes, new Date().toISOString()]
+        'INSERT INTO sales_orders (id, customer_id, project_id, order_date, status, total_amount, notes, approver_id, approval_status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+        [
+          id, 
+          toNull(customerId), 
+          toNull(projectId), 
+          orderDate || new Date().toISOString(), 
+          status || 'draft', 
+          totalAmount || 0, 
+          notes || '', 
+          toNull(approverId),
+          'pending',
+          new Date().toISOString()
+        ]
       );
 
       if (items && Array.isArray(items)) {
@@ -331,7 +574,14 @@ async function startServer() {
           const itemId = 'SOI' + Date.now() + Math.random().toString(36).substr(2, 5);
           await db.query(
             'INSERT INTO sales_order_items (id, sales_order_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
-            [itemId, id, item.description, item.quantity, item.unitPrice, item.totalPrice]
+            [
+              itemId, 
+              id, 
+              item.description || '', 
+              item.quantity || 1, 
+              item.unitPrice || 0, 
+              item.totalPrice || 0
+            ]
           );
         }
       }
@@ -339,26 +589,46 @@ async function startServer() {
       const activityId = 'ACT' + Date.now();
       await db.query(
         'INSERT INTO activities (id, type, sub_type, content, timestamp, customer_id, project_id, sales_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [activityId, 'sales_order', 'creation', `Sales Order ${id} created`, new Date().toISOString(), customerId, projectId, id]
+        [
+          activityId, 
+          'sales_order', 
+          'creation', 
+          `Sales Order ${id} created`, 
+          new Date().toISOString(), 
+          toNull(customerId), 
+          toNull(projectId),
+          id
+        ]
       );
 
       await db.query('COMMIT');
       res.status(201).json({ ...mapSalesOrder(result.rows[0]), items: items || [] });
     } catch (err) {
       await db.query('ROLLBACK');
-      res.status(500).json({ error: 'Failed to create sales order' });
+      console.error('Failed to create sales order:', err);
+      res.status(500).json({ error: 'Failed to create sales order', details: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.put('/api/sales-orders/:id', authenticateToken, checkRole(['admin', 'staff']), async (req, res) => {
     const { id } = req.params;
-    const { customerId, projectId, orderDate, status, totalAmount, notes, items } = req.body;
+    const { customerId, projectId, orderDate, status, totalAmount, notes, items, approverId, approvalStatus } = req.body;
     try {
       await db.query('BEGIN');
       
       const result = await db.query(
-        'UPDATE sales_orders SET customer_id = $1, project_id = $2, order_date = $3, status = $4, total_amount = $5, notes = $6 WHERE id = $7 RETURNING *',
-        [customerId, projectId, orderDate, status, totalAmount, notes, id]
+        'UPDATE sales_orders SET customer_id = $1, project_id = $2, order_date = $3, status = $4, total_amount = $5, notes = $6, approver_id = $7, approval_status = $8 WHERE id = $9 RETURNING *',
+        [
+          toNull(customerId), 
+          toNull(projectId), 
+          orderDate || new Date().toISOString(), 
+          status || 'draft', 
+          totalAmount || 0, 
+          notes || '', 
+          toNull(approverId),
+          approvalStatus || 'pending',
+          id
+        ]
       );
 
       if (result.rows.length === 0) {
@@ -374,7 +644,14 @@ async function startServer() {
           const itemId = 'SOI' + Date.now() + Math.random().toString(36).substr(2, 5);
           await db.query(
             'INSERT INTO sales_order_items (id, sales_order_id, description, quantity, unit_price, total_price) VALUES ($1, $2, $3, $4, $5, $6)',
-            [itemId, id, item.description, item.quantity, item.unitPrice, item.totalPrice]
+            [
+              itemId, 
+              id, 
+              item.description || '', 
+              item.quantity || 1, 
+              item.unitPrice || 0, 
+              item.totalPrice || 0
+            ]
           );
         }
       }
@@ -382,14 +659,79 @@ async function startServer() {
       const activityId = 'ACT' + Date.now();
       await db.query(
         'INSERT INTO activities (id, type, sub_type, content, timestamp, customer_id, project_id, sales_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [activityId, 'sales_order', 'update', `Sales Order ${id} updated`, new Date().toISOString(), customerId, projectId, id]
+        [
+          activityId, 
+          'sales_order', 
+          'update', 
+          `Sales Order ${id} updated`, 
+          new Date().toISOString(), 
+          toNull(customerId), 
+          toNull(projectId),
+          id
+        ]
       );
 
       await db.query('COMMIT');
       res.json({ ...mapSalesOrder(result.rows[0]), items: items || [] });
     } catch (err) {
       await db.query('ROLLBACK');
-      res.status(500).json({ error: 'Failed to update sales order' });
+      console.error('Failed to update sales order:', err);
+      res.status(500).json({ error: 'Failed to update sales order', details: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post('/api/sales-orders/:id/approve', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { action } = req.body; // 'approve' or 'reject'
+    const userId = (req as any).user.id;
+
+    try {
+      await db.query('BEGIN');
+      
+      const orderResult = await db.query('SELECT * FROM sales_orders WHERE id = $1', [id]);
+      if (orderResult.rows.length === 0) {
+        await db.query('ROLLBACK');
+        return res.status(404).json({ error: 'Sales order not found' });
+      }
+
+      const order = orderResult.rows[0];
+      const userRole = (req as any).user.role;
+
+      // Only assigned approver or admin can approve/reject
+      if (order.approver_id !== userId && userRole !== 'admin') {
+        await db.query('ROLLBACK');
+        return res.status(403).json({ error: 'Not authorized to approve this order' });
+      }
+
+      const newStatus = action === 'approve' ? 'approved' : 'rejected';
+      const finalStatus = action === 'approve' ? 'completed' : order.status;
+
+      const result = await db.query(
+        'UPDATE sales_orders SET approval_status = $1, status = $2, approved_at = $3 WHERE id = $4 RETURNING *',
+        [newStatus, finalStatus, action === 'approve' ? new Date().toISOString() : null, id]
+      );
+
+      const activityId = 'ACT' + Date.now();
+      await db.query(
+        'INSERT INTO activities (id, type, sub_type, content, timestamp, customer_id, project_id, sales_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [
+          activityId, 
+          'sales_order', 
+          'approval', 
+          `Sales Order ${id} ${newStatus} by ${(req as any).user.name}`, 
+          new Date().toISOString(), 
+          toNull(order.customer_id), 
+          toNull(order.project_id),
+          id
+        ]
+      );
+
+      await db.query('COMMIT');
+      res.json(mapSalesOrder(result.rows[0]));
+    } catch (err) {
+      await db.query('ROLLBACK');
+      console.error('Failed to approve sales order:', err);
+      res.status(500).json({ error: 'Failed to approve sales order' });
     }
   });
 
@@ -399,16 +741,41 @@ async function startServer() {
       await db.query('DELETE FROM sales_orders WHERE id = $1', [id]);
       res.status(204).send();
     } catch (err) {
-      res.status(500).json({ error: 'Failed to delete sales order' });
+      console.error('Failed to delete sales order:', err);
+      res.status(500).json({ error: 'Failed to delete sales order', details: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.get('/api/activities', authenticateToken, async (req, res) => {
+    const { customerId, projectId, salesOrderId } = req.query;
     try {
-      const result = await db.query('SELECT * FROM activities ORDER BY timestamp DESC');
+      let query = 'SELECT * FROM activities';
+      const params = [];
+
+      if (customerId || projectId || salesOrderId) {
+        query += ' WHERE ';
+        const conditions = [];
+        if (customerId) {
+          params.push(customerId);
+          conditions.push(`customer_id = $${params.length}`);
+        }
+        if (projectId) {
+          params.push(projectId);
+          conditions.push(`project_id = $${params.length}`);
+        }
+        if (salesOrderId) {
+          params.push(salesOrderId);
+          conditions.push(`sales_order_id = $${params.length}`);
+        }
+        query += conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY timestamp DESC';
+      const result = await db.query(query, params);
       res.json(result.rows.map(mapActivity));
     } catch (err) {
-      res.status(500).json({ error: 'Failed to fetch activities' });
+      console.error('Failed to fetch activities:', err);
+      res.status(500).json({ error: 'Failed to fetch activities', details: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -1063,6 +1430,143 @@ async function startServer() {
       res.status(204).send();
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete task' });
+    }
+  });
+
+  // Employees CRUD
+  const mapEmployee = (row: any) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    position: row.position,
+    department: row.department,
+    departmentId: row.department_id,
+    status: row.status,
+    joinedAt: row.joined_at,
+    managerId: row.manager_id,
+    userId: row.user_id,
+    createdAt: row.created_at
+  });
+
+  const mapDepartment = (row: any) => ({
+    id: row.id,
+    name: row.name,
+    parentId: row.parent_id,
+    managerId: row.manager_id,
+    description: row.description,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+
+  app.get('/api/employees', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT * FROM employees ORDER BY created_at DESC');
+      res.json(result.rows.map(mapEmployee));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch employees' });
+    }
+  });
+
+  app.post('/api/employees', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { name, email, phone, position, department, departmentId, status, joinedAt, managerId, userId } = req.body;
+    try {
+      const id = 'E' + Date.now();
+      const result = await db.query(
+        'INSERT INTO employees (id, name, email, phone, position, department, department_id, status, joined_at, manager_id, user_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
+        [id, name, email, phone, position, department, departmentId || null, status || 'active', joinedAt || new Date().toISOString().split('T')[0], managerId || null, userId || null, new Date().toISOString()]
+      );
+      res.status(201).json(mapEmployee(result.rows[0]));
+    } catch (err: any) {
+      if (err.code === '23505') {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      res.status(500).json({ error: 'Failed to create employee' });
+    }
+  });
+
+  app.put('/api/employees/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    const { name, email, phone, position, department, departmentId, status, joinedAt, managerId, userId } = req.body;
+    try {
+      const result = await db.query(
+        'UPDATE employees SET name = $1, email = $2, phone = $3, position = $4, department = $5, status = $6, joined_at = $7, manager_id = $8, user_id = $9, department_id = $10 WHERE id = $11 RETURNING *',
+        [name, email, phone, position, department, status, joinedAt, managerId || null, userId || null, departmentId || null, id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+      res.json(mapEmployee(result.rows[0]));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update employee' });
+    }
+  });
+
+  app.delete('/api/employees/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    try {
+      await db.query('DELETE FROM employees WHERE id = $1', [id]);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete employee' });
+    }
+  });
+
+  // Departments API
+  app.get('/api/departments', authenticateToken, async (req, res) => {
+    try {
+      const result = await db.query('SELECT * FROM departments ORDER BY name ASC');
+      res.json(result.rows.map(mapDepartment));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch departments' });
+    }
+  });
+
+  app.post('/api/departments', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { name, parentId, managerId, description } = req.body;
+    const id = 'DEPT' + uuidv4().substring(0, 8).toUpperCase();
+    try {
+      const result = await db.query(
+        'INSERT INTO departments (id, name, parent_id, manager_id, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [id, name, parentId || null, managerId || null, description]
+      );
+      res.status(201).json(mapDepartment(result.rows[0]));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to create department' });
+    }
+  });
+
+  app.put('/api/departments/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    const { name, parentId, managerId, description } = req.body;
+    try {
+      const result = await db.query(
+        'UPDATE departments SET name = $1, parent_id = $2, manager_id = $3, description = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 RETURNING *',
+        [name, parentId || null, managerId || null, description, req.params.id]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Department not found' });
+      }
+      res.json(mapDepartment(result.rows[0]));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update department' });
+    }
+  });
+
+  app.delete('/api/departments/:id', authenticateToken, checkRole(['admin']), async (req, res) => {
+    try {
+      // Check if there are sub-departments
+      const subDepts = await db.query('SELECT id FROM departments WHERE parent_id = $1', [req.params.id]);
+      if (subDepts.rows.length > 0) {
+        return res.status(400).json({ error: 'Cannot delete department with sub-departments' });
+      }
+      // Check if there are employees
+      const employees = await db.query('SELECT id FROM employees WHERE department_id = $1', [req.params.id]);
+      if (employees.rows.length > 0) {
+        return res.status(400).json({ error: 'Cannot delete department with assigned employees' });
+      }
+
+      await db.query('DELETE FROM departments WHERE id = $1', [req.params.id]);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete department' });
     }
   });
 

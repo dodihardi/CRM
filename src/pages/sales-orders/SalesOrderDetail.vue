@@ -14,6 +14,13 @@
           >
             {{ order.status }}
           </span>
+          <span 
+            v-if="order.approvalStatus"
+            class="px-2 py-1 text-[10px] font-bold uppercase rounded-full"
+            :class="getApprovalStatusClass(order.approvalStatus)"
+          >
+            Approval: {{ order.approvalStatus }}
+          </span>
         </div>
         <p class="text-slate-500">Created on {{ new Date(order.createdAt).toLocaleDateString() }}</p>
       </div>
@@ -154,6 +161,74 @@
             View Project
           </router-link>
         </div>
+
+        <!-- Approval Info -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">Approval Workflow</h3>
+          <div v-if="approver" class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+              <User class="w-5 h-5" />
+            </div>
+            <div>
+              <p class="text-xs text-slate-500 uppercase font-bold">Assigned Approver</p>
+              <p class="font-bold text-slate-900">{{ approver.name }}</p>
+            </div>
+          </div>
+          <div v-else class="text-sm text-slate-500 italic">
+            No approver assigned.
+          </div>
+
+          <div v-if="order.approvalStatus === 'pending' && canApprove" class="pt-4 grid grid-cols-2 gap-3">
+            <button 
+              @click="handleApprove('reject')"
+              :disabled="isApproving"
+              class="flex items-center justify-center px-4 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <XCircle class="w-4 h-4 mr-2" />
+              Reject
+            </button>
+            <button 
+              @click="handleApprove('approve')"
+              :disabled="isApproving"
+              class="flex items-center justify-center px-4 py-2 text-sm font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <CheckCircle class="w-4 h-4 mr-2" />
+              Approve
+            </button>
+          </div>
+          <div v-else-if="order.approvalStatus !== 'pending'" class="pt-4">
+            <div 
+              class="flex items-center p-3 rounded-lg"
+              :class="order.approvalStatus === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'"
+            >
+              <CheckCircle v-if="order.approvalStatus === 'approved'" class="w-5 h-5 mr-2" />
+              <XCircle v-else class="w-5 h-5 mr-2" />
+              <span class="text-sm font-bold">
+                {{ order.approvalStatus === 'approved' ? 'Approved' : 'Rejected' }}
+                <span v-if="order.approvedAt" class="block text-[10px] font-normal opacity-75">
+                  on {{ new Date(order.approvedAt).toLocaleString() }}
+                </span>
+              </span>
+            </div>
+          </div>
+          
+          <!-- Re-assign Approver (Admin only or if pending) -->
+          <div v-if="authStore.user?.role === 'admin' || (order.approvalStatus === 'pending')" class="pt-4 space-y-2 border-t border-slate-100">
+            <label class="text-[10px] font-bold text-slate-500 uppercase">Change Approver</label>
+            <Combogrid
+              v-model="order.approverId"
+              :options="appStore.users"
+              :columns="[
+                { label: 'Name', key: 'name' },
+                { label: 'Role', key: 'role' }
+              ]"
+              placeholder="Select Approver..."
+              displayKey="name"
+              :searchKeys="['name', 'role']"
+              @change="handleUpdate"
+            />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -248,8 +323,23 @@
       </div>
     </div>
   </div>
-  <div v-else class="flex items-center justify-center h-64">
+  <div v-else-if="isLoadingOrder" class="flex items-center justify-center h-64">
     <Loader2 class="w-8 h-8 animate-spin text-emerald-600" />
+  </div>
+  <div v-else class="flex flex-col items-center justify-center h-64 space-y-4">
+    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+      <X class="w-8 h-8" />
+    </div>
+    <div class="text-center">
+      <h3 class="text-lg font-bold text-slate-900">Sales Order Not Found</h3>
+      <p class="text-slate-500">The order you're looking for doesn't exist or has been removed.</p>
+    </div>
+    <router-link 
+      to="/sales-orders"
+      class="text-emerald-600 font-medium hover:text-emerald-700"
+    >
+      Back to Sales Orders
+    </router-link>
   </div>
 </template>
 
@@ -257,15 +347,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { ArrowLeft, Plus, Trash2, X, Loader2, Briefcase } from 'lucide-vue-next'
+import { useAuthStore } from '@/stores/auth'
+import { 
+  ArrowLeft, Plus, Trash2, X, Loader2, Briefcase, 
+  CheckCircle, XCircle, User 
+} from 'lucide-vue-next'
+import Combogrid from '@/components/Combogrid.vue'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const showAddItemModal = ref(false)
 const showDeleteModal = ref(false)
 const isUpdating = ref(false)
+const isLoadingOrder = ref(false)
+const isApproving = ref(false)
 
 const newItem = ref({
   description: '',
@@ -285,13 +383,32 @@ const project = computed(() => {
   return order.value ? appStore.projects.find(p => p.id === order.value?.projectId) : null
 })
 
+const approver = computed(() => {
+  return order.value ? appStore.users.find(u => u.id === order.value?.approverId) : null
+})
+
+const canApprove = computed(() => {
+  if (!order.value || !authStore.user) return false
+  return order.value.approverId === authStore.user.id || authStore.user.role === 'admin'
+})
+
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'draft': return 'bg-slate-100 text-slate-600'
     case 'confirmed': return 'bg-blue-100 text-blue-600'
     case 'shipped': return 'bg-amber-100 text-amber-600'
     case 'delivered': return 'bg-emerald-100 text-emerald-600'
+    case 'completed': return 'bg-emerald-600 text-white'
     case 'cancelled': return 'bg-red-100 text-red-600'
+    default: return 'bg-slate-100 text-slate-600'
+  }
+}
+
+const getApprovalStatusClass = (status: string) => {
+  switch (status) {
+    case 'pending': return 'bg-amber-100 text-amber-600'
+    case 'approved': return 'bg-emerald-100 text-emerald-600'
+    case 'rejected': return 'bg-red-100 text-red-600'
     default: return 'bg-slate-100 text-slate-600'
   }
 }
@@ -342,6 +459,18 @@ const handleStatusUpdate = async () => {
   await handleUpdate()
 }
 
+const handleApprove = async (action: 'approve' | 'reject') => {
+  if (!order.value || isApproving.value) return
+  isApproving.value = true
+  try {
+    await appStore.approveSalesOrder(order.value.id, action)
+  } catch (err) {
+    console.error(err)
+  } finally {
+    isApproving.value = false
+  }
+}
+
 const handleUpdate = async () => {
   if (!order.value || isUpdating.value) return
   isUpdating.value = true
@@ -365,8 +494,17 @@ const handleDelete = async () => {
 }
 
 onMounted(async () => {
-  if (appStore.salesOrders.length === 0) {
-    await appStore.fetchData()
+  if (!order.value) {
+    isLoadingOrder.value = true
+    try {
+      await appStore.fetchSalesOrder(route.params.id as string)
+      // Also fetch other data if needed
+      if (appStore.customers.length === 0) {
+        await appStore.fetchData()
+      }
+    } finally {
+      isLoadingOrder.value = false
+    }
   }
 })
 </script>

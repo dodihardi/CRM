@@ -197,10 +197,17 @@
             </div>
             <div>
               <label class="block text-sm font-bold text-slate-700 mb-1">Linked Auction (Optional)</label>
-              <select v-model="projectForm.auction_id" class="w-full border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-                <option value="">No Auction</option>
-                <option v-for="a in store.auctions" :key="a.id" :value="a.id">{{ a.title }}</option>
-              </select>
+              <Combogrid
+                v-model="projectForm.auction_id"
+                :options="store.auctions"
+                :columns="[
+                  { key: 'title', label: 'Auction Title' },
+                  { key: 'status', label: 'Status' }
+                ]"
+                displayKey="title"
+                :searchKeys="['title']"
+                placeholder="Select Auction (Optional)"
+              />
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div>
@@ -235,6 +242,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { ArrowLeft, Mail, Building2, Phone, MapPin, Pencil, Plus, X } from 'lucide-vue-next'
 import DocumentSection from '@/components/DocumentSection.vue'
+import Combogrid from '@/components/Combogrid.vue'
 
 const route = useRoute()
 const store = useAppStore()

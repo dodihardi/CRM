@@ -13,6 +13,7 @@
       <nav class="flex-1 px-4 space-y-2 overflow-y-auto overflow-x-hidden">
         <!-- Dashboard -->
         <router-link 
+          v-if="authStore.hasPermission('dashboard')"
           to="/"
           class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative"
           :class="[
@@ -21,13 +22,15 @@
         >
           <LayoutDashboard class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto']" />
           <span v-if="!isSidebarCollapsed" class="truncate">Dashboard</span>
-          <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-            Dashboard
+          <div v-if="isSidebarCollapsed" class="absolute left-full top-0 pl-2 h-full flex items-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+            <div class="px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+              Dashboard
+            </div>
           </div>
         </router-link>
 
         <!-- Master Data -->
-        <div class="space-y-1">
+        <div v-if="filteredMasterItems.length > 0" class="space-y-1">
           <button 
             @click="toggleGroup('master')"
             class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -36,8 +39,10 @@
             <span v-if="!isSidebarCollapsed" class="truncate flex-1 text-left">Master Data</span>
             <ChevronDown v-if="!isSidebarCollapsed" class="w-4 h-4 transition-transform duration-200" :class="{'rotate-180': openGroups.master}" />
             
-            <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              Master Data
+            <div v-if="isSidebarCollapsed" class="absolute left-full top-0 pl-2 h-full flex items-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <div class="px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+                Master Data
+              </div>
             </div>
           </button>
           
@@ -58,7 +63,7 @@
         </div>
 
         <!-- Transaction -->
-        <div class="space-y-1">
+        <div v-if="filteredTransactionItems.length > 0" class="space-y-1">
           <button 
             @click="toggleGroup('transaction')"
             class="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors group relative text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -67,14 +72,16 @@
             <span v-if="!isSidebarCollapsed" class="truncate flex-1 text-left">Transaction</span>
             <ChevronDown v-if="!isSidebarCollapsed" class="w-4 h-4 transition-transform duration-200" :class="{'rotate-180': openGroups.transaction}" />
             
-            <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-              Transaction
+            <div v-if="isSidebarCollapsed" class="absolute left-full top-0 pl-2 h-full flex items-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+              <div class="px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+                Transaction
+              </div>
             </div>
           </button>
           
           <div v-if="openGroups.transaction && !isSidebarCollapsed" class="pl-4 space-y-1">
             <router-link 
-              v-for="item in transactionItems" 
+              v-for="item in filteredTransactionItems" 
               :key="item.name"
               :to="item.path"
               class="flex items-center px-4 py-2 text-xs font-medium rounded-lg transition-colors group relative"
@@ -89,12 +96,13 @@
         </div>
 
         <!-- Local Deployment Section -->
-        <div class="pt-4 pb-2 px-4" :class="[isSidebarCollapsed ? 'text-center' : '']">
+        <div v-if="authStore.hasPermission('local-deployment')" class="pt-4 pb-2 px-4" :class="[isSidebarCollapsed ? 'text-center' : '']">
           <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate">
             {{ isSidebarCollapsed ? 'Env' : 'Environment' }}
           </p>
         </div>
         <a 
+          v-if="authStore.hasPermission('local-deployment')"
           :href="appUrl" 
           target="_blank"
           class="flex items-center px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group relative"
@@ -102,8 +110,10 @@
           <Globe class="w-5 h-5 flex-shrink-0" :class="[!isSidebarCollapsed ? 'mr-3' : 'mx-auto text-emerald-400']" />
           <span v-if="!isSidebarCollapsed" class="truncate text-emerald-400">Local Deployment</span>
           
-          <div v-if="isSidebarCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-            Local Deployment
+          <div v-if="isSidebarCollapsed" class="absolute left-full top-0 pl-2 h-full flex items-center opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+            <div class="px-2 py-1 bg-slate-800 text-white text-xs rounded shadow-lg whitespace-nowrap">
+              Local Deployment
+            </div>
           </div>
         </a>
       </nav>
@@ -166,14 +176,16 @@
             </div>
             
             <!-- User Dropdown -->
-            <div class="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-50">
-              <button 
-                @click="handleLogout"
-                class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
-              >
-                <LogOut class="w-4 h-4 mr-2" />
-                Logout
-              </button>
+            <div class="absolute right-0 top-full pt-2 w-48 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-50">
+              <div class="bg-white rounded-xl shadow-lg border border-slate-200 py-1 overflow-hidden">
+                <button 
+                  @click="handleLogout"
+                  class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center transition-colors"
+                >
+                  <LogOut class="w-4 h-4 mr-2" />
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -210,7 +222,10 @@ import {
   ChevronDown,
   LogOut,
   Database,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Contact,
+  Network,
+  Video
 } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
@@ -237,20 +252,28 @@ const handleLogout = () => {
 }
 
 const masterItems = [
-  { name: 'Leads', path: '/leads', routeName: 'leads-list', icon: Users },
-  { name: 'Customers', path: '/customers', routeName: 'customers-list', icon: UserSquare2 },
-  { name: 'Users', path: '/users', routeName: 'users-list', icon: Users, adminOnly: true },
+  { name: 'Leads', path: '/leads', routeName: 'leads-list', icon: Users, menuKey: 'leads' },
+  { name: 'Customers', path: '/customers', routeName: 'customers-list', icon: UserSquare2, menuKey: 'customers' },
+  { name: 'Departments', path: '/departments', routeName: 'departments-list', icon: Network, menuKey: 'departments' },
+  { name: 'Employees', path: '/employees', routeName: 'employees-list', icon: Contact, menuKey: 'employees' },
+  { name: 'Users', path: '/users', routeName: 'users-list', icon: Users, menuKey: 'users' },
+  { name: 'Permissions', path: '/menu-permissions', routeName: 'menu-permissions', icon: Database, menuKey: 'menu-permissions' },
 ]
 
 const transactionItems = [
-  { name: 'Auctions', path: '/auctions', routeName: 'auctions-list', icon: Gavel },
-  { name: 'Projects', path: '/projects', routeName: 'projects-list', icon: Briefcase },
-  { name: 'Sales Orders', path: '/sales-orders', routeName: 'sales-orders-list', icon: ArrowRightLeft },
-  { name: 'Activities', path: '/activities', routeName: 'activities', icon: History },
+  { name: 'Auctions', path: '/auctions', routeName: 'auctions-list', icon: Gavel, menuKey: 'auctions' },
+  { name: 'Projects', path: '/projects', routeName: 'projects-list', icon: Briefcase, menuKey: 'projects' },
+  { name: 'Sales Orders', path: '/sales-orders', routeName: 'sales-orders-list', icon: ArrowRightLeft, menuKey: 'sales-orders' },
+  { name: 'CCTV Monitoring', path: '/cctv-monitoring', routeName: 'cctv-monitoring', icon: Video, menuKey: 'cctv-monitoring' },
+  { name: 'Activities', path: '/activities', routeName: 'activities', icon: History, menuKey: 'activities' },
 ]
 
 const filteredMasterItems = computed(() => {
-  return masterItems.filter(item => !item.adminOnly || authStore.isAdmin)
+  return masterItems.filter(item => authStore.hasPermission(item.menuKey))
+})
+
+const filteredTransactionItems = computed(() => {
+  return transactionItems.filter(item => authStore.hasPermission(item.menuKey))
 })
 </script>
 

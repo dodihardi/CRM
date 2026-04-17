@@ -14,11 +14,13 @@
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/d3": "^7.4.3",
     "@types/multer": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitejs/plugin-vue": "^6.0.5",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
+    "d3": "^7.9.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",

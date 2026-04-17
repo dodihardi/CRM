@@ -4,8 +4,9 @@ import { ref, computed } from 'vue'
 export interface User {
   id: string
   username: string
-  role: 'admin' | 'staff' | 'viewer'
+  role: string
   name: string
+  permissions?: string[]
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -15,6 +16,11 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
   const isStaff = computed(() => user.value?.role === 'staff' || user.value?.role === 'admin')
+
+  const hasPermission = (menuKey: string) => {
+    if (isAdmin.value) return true
+    return user.value?.permissions?.includes(menuKey) || false
+  }
 
   const login = async (username: string, password: string) => {
     const res = await fetch('/api/auth/login', {
@@ -66,6 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     isStaff,
+    hasPermission,
     login,
     logout,
     fetchMe
